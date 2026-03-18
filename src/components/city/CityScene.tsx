@@ -1,15 +1,74 @@
 'use client'
 
-import { Canvas } from '@react-three/fiber'
+import { useRef, useState, useEffect, useCallback } from 'react'
+import { Canvas, useThree } from '@react-three/fiber'
 import { OrbitControls, Stars, Grid } from '@react-three/drei'
-import { Suspense, useEffect } from 'react'
+import { Suspense } from 'react'
 import * as THREE from 'three'
 import { Building } from './Building'
 import { Ground } from './Ground'
+import { AgentCharacter } from './AgentCharacter'
 import { useGameStore } from '@/store/gameStore'
+import { BUILDING_TEMPLATES } from '@/data/buildings'
+
+function PlacementGhost() {
+  const buildingPlacementType = useGameStore((s) => s.buildingPlacementType)
+  const placeBuilding = useGameStore((s) => s.placeBuilding)
+  const setBuildingPlacementType = useGameStore((s) => s.setBuildingPlacementType)
+  const meshRef = useRef<THREE.Mesh>(null)
+  const [ghostPos, setGhostPos] = useState<[number, number, number]>([0, 0, 0])
+
+  const template = BUILDING_TEMPLATES.find((t) => t.type === buildingPlacementType)
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setBuildingPlacementType(null)
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [setBuildingPlacementType])
+
+  if (!buildingPlacementType || !template) return null
+
+  return (
+    <>
+      {/* Invisible ground plane for raycasting */}
+      <mesh
+        position={[0, 0, 0]}
+        rotation={[-Math.PI / 2, 0, 0]}
+        onPointerMove={(e) => {
+          e.stopPropagation()
+          const snap = (v: number) => Math.round(v * 2) / 2
+          setGhostPos([snap(e.point.x), 0, snap(e.point.z)])
+        }}
+        onClick={(e) => {
+          e.stopPropagation()
+          placeBuilding(buildingPlacementType, ghostPos)
+          setBuildingPlacementType(null)
+        }}
+      >
+        <planeGeometry args={[60, 60]} />
+        <meshBasicMaterial visible={false} />
+      </mesh>
+
+      {/* Ghost building preview */}
+      <mesh ref={meshRef} position={[ghostPos[0], 0.6, ghostPos[2]]}>
+        <boxGeometry args={[1.4, 1.2, 1.4]} />
+        <meshStandardMaterial
+          color={template.color}
+          transparent
+          opacity={0.4}
+          emissive={template.color}
+          emissiveIntensity={0.3}
+        />
+      </mesh>
+    </>
+  )
+}
 
 export default function CityScene() {
   const { buildings, tickResources, loadFromStrapi, isLoaded } = useGameStore()
+  const agents = useGameStore((s) => s.agents)
 
   useEffect(() => {
     if (!isLoaded) loadFromStrapi()
@@ -80,6 +139,14 @@ export default function CityScene() {
         {buildings.map((building) => (
           <Building key={building.id} building={building} />
         ))}
+
+        {/* Agents */}
+        {agents.map((agent) => (
+          <AgentCharacter key={agent.id} agent={agent} />
+        ))}
+
+        {/* Placement mode */}
+        <PlacementGhost />
 
         {/* Camera controls */}
         <OrbitControls

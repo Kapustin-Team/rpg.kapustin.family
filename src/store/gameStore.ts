@@ -3,6 +3,8 @@ import {
   StrapiTask, StrapiRpgBuilding, StrapiRpgResource, StrapiRpgCharacter,
   strapiApi
 } from '@/lib/strapi'
+import { AGENTS, type Agent } from '@/data/agents'
+import { BUILDING_TEMPLATES } from '@/data/buildings'
 
 export type ResourceType = 'gold' | 'food' | 'wood' | 'stone' | 'knowledge' | 'energy' | 'data' | 'code' | 'creativity'
 
@@ -34,6 +36,7 @@ export interface Task {
   xpReward: number
   rpgCategory?: 'build' | 'research' | 'trade' | 'defense' | 'exploration'
   dueDate?: string
+  assignedTo?: string
 }
 
 export interface Character {
@@ -61,6 +64,8 @@ const RESOURCE_META: Record<string, { icon: string; color: string; label: string
 const DEFAULT_RESOURCES: Resource[] = [
   { type: 'gold',       amount: 500,  maxCapacity: 2000, productionRate: 5,  ...RESOURCE_META.gold },
   { type: 'food',       amount: 200,  maxCapacity: 1000, productionRate: 8,  ...RESOURCE_META.food },
+  { type: 'wood',       amount: 150,  maxCapacity: 1000, productionRate: 3,  ...RESOURCE_META.wood },
+  { type: 'stone',      amount: 100,  maxCapacity: 1000, productionRate: 2,  ...RESOURCE_META.stone },
   { type: 'knowledge',  amount: 50,   maxCapacity: 500,  productionRate: 1,  ...RESOURCE_META.knowledge },
   { type: 'data',       amount: 300,  maxCapacity: 5000, productionRate: 15, ...RESOURCE_META.data },
   { type: 'code',       amount: 80,   maxCapacity: 1000, productionRate: 4,  ...RESOURCE_META.code },
@@ -68,7 +73,7 @@ const DEFAULT_RESOURCES: Resource[] = [
 ]
 
 const DEFAULT_BUILDINGS: Building[] = [
-  { id: 'hq',      name: 'Штаб',                type: 'tower',   level: 1, position: [0, 0, 0],    status: 'active',              constructionProgress: 100 },
+  { id: 'hq',      name: 'Штаб',                type: 'hq',      level: 1, position: [0, 0, 0],    status: 'active',              constructionProgress: 100 },
   { id: 'farm1',   name: 'Ферма',               type: 'farm',    level: 1, position: [-4, 0, 2],   status: 'active',              constructionProgress: 100 },
   { id: 'lib1',    name: 'Библиотека',          type: 'library', level: 1, position: [4, 0, -2],   status: 'active',              constructionProgress: 100 },
   { id: 'lab1',    name: 'Лаборатория данных',  type: 'lab',     level: 1, position: [3, 0, 3],    status: 'under_construction',  constructionProgress: 45 },
@@ -133,11 +138,18 @@ interface GameStore {
   resources: Resource[]
   buildings: Building[]
   tasks: Task[]
+  agents: Agent[]
   isLoaded: boolean
   selectedBuildingId: string | null
+  selectedAgentId: string | null
+  buildingPlacementType: string | null
   isPanelOpen: boolean
   setSelectedBuilding: (id: string | null) => void
   setIsPanelOpen: (open: boolean) => void
+  setSelectedAgent: (id: string | null) => void
+  assignTaskToAgent: (agentId: string, taskId: string) => void
+  setBuildingPlacementType: (type: string | null) => void
+  placeBuilding: (type: string, position: [number, number, number]) => void
   completeTask: (taskId: string) => void
   tickResources: () => void
   loadFromStrapi: () => Promise<void>
@@ -148,12 +160,62 @@ export const useGameStore = create<GameStore>((set, get) => ({
   resources: DEFAULT_RESOURCES,
   buildings: DEFAULT_BUILDINGS,
   tasks: [],
+  agents: AGENTS.map(a => ({ ...a })),
   isLoaded: false,
   selectedBuildingId: null,
+  selectedAgentId: null,
+  buildingPlacementType: null,
   isPanelOpen: false,
 
   setSelectedBuilding: (id) => set({ selectedBuildingId: id }),
   setIsPanelOpen: (open) => set({ isPanelOpen: open }),
+  setSelectedAgent: (id) => set({ selectedAgentId: id }),
+
+  setBuildingPlacementType: (type) => set({ buildingPlacementType: type }),
+
+  assignTaskToAgent: (agentId, taskId) => set((state) => ({
+    tasks: state.tasks.map(t =>
+      t.id === taskId ? { ...t, assignedTo: agentId, status: 'in_progress' as const } : t
+    ),
+    agents: state.agents.map(a =>
+      a.id === agentId ? { ...a, status: 'working' as const, currentTaskId: taskId } : a
+    ),
+  })),
+
+  placeBuilding: (type, position) => set((state) => {
+    const template = BUILDING_TEMPLATES.find(t => t.type === type)
+    if (!template) return state
+
+    const gold = state.resources.find(r => r.type === 'gold')
+    const wood = state.resources.find(r => r.type === 'wood')
+    const stone = state.resources.find(r => r.type === 'stone')
+
+    if ((gold?.amount ?? 0) < template.costGold ||
+        (wood?.amount ?? 0) < template.costWood ||
+        (stone?.amount ?? 0) < template.costStone) {
+      return state
+    }
+
+    const newBuilding: Building = {
+      id: `${type}_${Date.now()}`,
+      name: template.name,
+      type: template.type,
+      level: 1,
+      position,
+      status: 'active',
+      constructionProgress: 100,
+    }
+
+    return {
+      buildings: [...state.buildings, newBuilding],
+      resources: state.resources.map(r => {
+        if (r.type === 'gold') return { ...r, amount: r.amount - template.costGold }
+        if (r.type === 'wood') return { ...r, amount: r.amount - template.costWood }
+        if (r.type === 'stone') return { ...r, amount: r.amount - template.costStone }
+        return r
+      }),
+    }
+  }),
 
   loadFromStrapi: async () => {
     try {
@@ -192,6 +254,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const levelUp = newXp >= state.character.xpToNextLevel
     return {
       tasks: state.tasks.map(t => t.id === taskId ? { ...t, status: 'done' as const } : t),
+      agents: state.agents.map(a =>
+        a.currentTaskId === taskId ? { ...a, status: 'idle' as const, currentTaskId: undefined } : a
+      ),
       character: {
         ...state.character,
         xp: levelUp ? newXp - state.character.xpToNextLevel : newXp,
