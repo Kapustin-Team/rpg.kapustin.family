@@ -37,6 +37,14 @@ export interface Task {
   rpgCategory?: 'build' | 'research' | 'trade' | 'defense' | 'exploration'
   dueDate?: string
   assignedTo?: string
+  resourceReward?: {
+    gold?: number
+    food?: number
+    knowledge?: number
+    data?: number
+    code?: number
+    creativity?: number
+  }
 }
 
 export interface Character {
@@ -219,6 +227,28 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
   loadFromStrapi: async () => {
     try {
+      // Try Next.js API proxy first for tasks
+      let proxyTasks: Task[] = []
+      try {
+        const proxyRes = await fetch('/api/tasks')
+        if (proxyRes.ok) {
+          const proxyData = await proxyRes.json()
+          if (proxyData.tasks?.length) {
+            proxyTasks = proxyData.tasks.map((t: { id: number; attributes?: { title: string; status: string; priority: string; rpgCategory?: string; resourceReward?: Task['resourceReward'] } }) => ({
+              id: String(t.id),
+              title: t.attributes?.title || 'Unknown task',
+              status: (t.attributes?.status === 'review' ? 'in_progress' : t.attributes?.status === 'cancelled' ? 'todo' : t.attributes?.status || 'todo') as Task['status'],
+              priority: (t.attributes?.priority || 'medium') as Task['priority'],
+              xpReward: 10,
+              rpgCategory: t.attributes?.rpgCategory as Task['rpgCategory'],
+              resourceReward: t.attributes?.resourceReward,
+            }))
+          }
+        }
+      } catch {
+        // proxy unavailable, fall through to direct Strapi
+      }
+
       const [tasks, buildings, resources, characters] = await Promise.allSettled([
         strapiApi.tasks(),
         strapiApi.buildings(),
@@ -226,11 +256,13 @@ export const useGameStore = create<GameStore>((set, get) => ({
         strapiApi.character(),
       ])
 
+      const strapiTasks = tasks.status === 'fulfilled' && tasks.value?.length
+        ? tasks.value.map(mapStrapiTask)
+        : []
+
       set({
         isLoaded: true,
-        tasks: tasks.status === 'fulfilled' && tasks.value?.length
-          ? tasks.value.map(mapStrapiTask)
-          : get().tasks,
+        tasks: proxyTasks.length ? proxyTasks : (strapiTasks.length ? strapiTasks : get().tasks),
         buildings: buildings.status === 'fulfilled' && buildings.value?.length
           ? buildings.value.map(mapStrapiBuilding)
           : get().buildings,
@@ -252,11 +284,16 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const xpGain = task.xpReward
     const newXp = state.character.xp + xpGain
     const levelUp = newXp >= state.character.xpToNextLevel
+    const reward = task.resourceReward || {}
     return {
       tasks: state.tasks.map(t => t.id === taskId ? { ...t, status: 'done' as const } : t),
       agents: state.agents.map(a =>
         a.currentTaskId === taskId ? { ...a, status: 'idle' as const, currentTaskId: undefined } : a
       ),
+      resources: state.resources.map(r => {
+        const bonus = reward[r.type as keyof typeof reward] || 0
+        return bonus > 0 ? { ...r, amount: Math.min(r.maxCapacity, r.amount + bonus) } : r
+      }),
       character: {
         ...state.character,
         xp: levelUp ? newXp - state.character.xpToNextLevel : newXp,

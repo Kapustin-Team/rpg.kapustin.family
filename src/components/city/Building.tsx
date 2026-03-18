@@ -72,27 +72,38 @@ export function Building({ building }: BuildingProps) {
         {renderModel()}
       </group>
 
-      {/* Status light */}
-      {isActive && (
-        <mesh position={[0.5, 0.3, 0.5]}>
-          <sphereGeometry args={[0.06, 8, 8]} />
-          <meshStandardMaterial
-            color="#84cc16"
-            emissive="#84cc16"
-            emissiveIntensity={2.0}
-          />
-        </mesh>
-      )}
+      {/* Scaffolding for under_construction */}
       {isConstructing && (
-        <mesh position={[0.5, 0.3, 0.5]}>
-          <sphereGeometry args={[0.06, 8, 8]} />
-          <meshStandardMaterial
-            color="#eab308"
-            emissive="#eab308"
-            emissiveIntensity={2.0}
-          />
-        </mesh>
+        <group>
+          {[
+            [1.2, 1.0, 1.2],
+            [-1.2, 1.0, 1.2],
+            [1.2, 1.0, -1.2],
+            [-1.2, 1.0, -1.2],
+          ].map((p, i) => (
+            <mesh key={`scaffold-${i}`} position={[p[0], p[1], p[2]]} rotation={[0.1 * (i % 2 === 0 ? 1 : -1), 0, 0.15 * (i < 2 ? 1 : -1)]}>
+              <cylinderGeometry args={[0.03, 0.03, 2.2, 4]} />
+              <meshStandardMaterial color="#8b7355" roughness={0.9} transparent opacity={0.8} />
+            </mesh>
+          ))}
+        </group>
       )}
+
+      {/* Status light */}
+      <mesh position={[0.5, 0.3, 0.5]}>
+        <sphereGeometry args={[0.06, 8, 8]} />
+        <meshStandardMaterial
+          color={isActive ? '#00ff66' : isConstructing ? '#ff8800' : '#666666'}
+          emissive={isActive ? '#00ff66' : isConstructing ? '#ff8800' : '#666666'}
+          emissiveIntensity={isActive ? 2.0 : isConstructing ? 1.5 : 0.3}
+        />
+      </mesh>
+
+      {/* Level badge */}
+      <mesh position={[0, 2.8, 0.3]}>
+        <boxGeometry args={[0.3, 0.2, 0.05]} />
+        <meshStandardMaterial color="#c9a84c" emissive="#c9a84c" emissiveIntensity={0.4} />
+      </mesh>
 
       {/* Construction progress */}
       {isConstructing && (
@@ -132,7 +143,7 @@ export function Building({ building }: BuildingProps) {
       {/* Ground shadow */}
       <mesh position={[0, 0.01, 0]} receiveShadow rotation={[-Math.PI / 2, 0, 0]}>
         <planeGeometry args={[2.5, 2.5]} />
-        <meshStandardMaterial color="#000000" transparent opacity={0.25} />
+        <meshStandardMaterial color="#000000" transparent opacity={0.15} />
       </mesh>
     </group>
   )
@@ -146,57 +157,83 @@ type ModelProps = {
 }
 
 function HQModel({ matProps, isActive }: ModelProps) {
+  const flagRef = useRef<THREE.Mesh>(null)
+
+  useFrame((state) => {
+    if (flagRef.current) {
+      flagRef.current.rotation.y = state.clock.elapsedTime * 0.5
+    }
+  })
+
   return (
     <group>
-      {/* Base platform */}
+      {/* Stone base platform */}
       <mesh castShadow receiveShadow position={[0, 0.1, 0]}>
-        <boxGeometry args={[2.2, 0.2, 2.2]} />
-        <meshStandardMaterial {...matProps('#8b7355', '#5c4a2a', 0.1)} />
+        <boxGeometry args={[2.8, 0.2, 2.8]} />
+        <meshStandardMaterial {...matProps('#8a8a8a', '#5a5a5a', 0.05)} />
       </mesh>
-      {/* Tower body */}
-      <mesh castShadow receiveShadow position={[0, 1.5, 0]}>
-        <boxGeometry args={[1.4, 2.6, 1.4]} />
-        <meshStandardMaterial {...matProps('#c9a84c', '#7c5c3e', 0.15)} />
+      {/* Main keep body */}
+      <mesh castShadow receiveShadow position={[0, 1.3, 0]}>
+        <boxGeometry args={[1.8, 2.2, 1.8]} />
+        <meshStandardMaterial {...matProps('#6a6a6a', '#4a4a4a', 0.1)} />
       </mesh>
-      {/* Narrower top section */}
-      <mesh castShadow receiveShadow position={[0, 3.1, 0]}>
-        <boxGeometry args={[1.0, 0.6, 1.0]} />
-        <meshStandardMaterial {...matProps('#d4b85c', '#8b7355', 0.2)} />
+      {/* Roof - steep pitched */}
+      <mesh castShadow position={[0, 2.7, 0]} rotation={[0, Math.PI / 4, 0]}>
+        <coneGeometry args={[1.5, 1.0, 4]} />
+        <meshStandardMaterial {...matProps('#3d2b1a', '#2a1a0a', 0.05)} />
       </mesh>
-      {/* 4 battlements */}
-      {[[0.55, 0, 0.55], [-0.55, 0, 0.55], [0.55, 0, -0.55], [-0.55, 0, -0.55]].map((p, i) => (
-        <mesh key={i} castShadow position={[p[0], 3.6, p[2]]}>
-          <boxGeometry args={[0.25, 0.35, 0.25]} />
-          <meshStandardMaterial {...matProps('#a08040', '#5c4a2a', 0.1)} />
-        </mesh>
+      {/* Corner towers */}
+      {[
+        [1.0, 0, 1.0], [-1.0, 0, 1.0], [1.0, 0, -1.0], [-1.0, 0, -1.0]
+      ].map((p, i) => (
+        <group key={`tower-${i}`}>
+          <mesh castShadow position={[p[0], 1.1, p[2]]}>
+            <cylinderGeometry args={[0.25, 0.3, 2.0, 8]} />
+            <meshStandardMaterial {...matProps('#7a7a7a', '#5a5a5a', 0.1)} />
+          </mesh>
+          <mesh castShadow position={[p[0], 2.3, p[2]]}>
+            <coneGeometry args={[0.35, 0.5, 8]} />
+            <meshStandardMaterial {...matProps('#3d2b1a', '#2a1a0a', 0.05)} />
+          </mesh>
+        </group>
       ))}
-      {/* Flag pole */}
-      <mesh castShadow position={[0, 3.9, 0]}>
-        <cylinderGeometry args={[0.03, 0.03, 1.2, 6]} />
+      {/* Gate arch */}
+      <mesh castShadow position={[0.25, 0.6, 0.91]}>
+        <boxGeometry args={[0.1, 1.0, 0.1]} />
+        <meshStandardMaterial {...matProps('#5a5a5a')} />
+      </mesh>
+      <mesh castShadow position={[-0.25, 0.6, 0.91]}>
+        <boxGeometry args={[0.1, 1.0, 0.1]} />
+        <meshStandardMaterial {...matProps('#5a5a5a')} />
+      </mesh>
+      <mesh castShadow position={[0, 1.15, 0.91]}>
+        <boxGeometry args={[0.6, 0.12, 0.12]} />
+        <meshStandardMaterial {...matProps('#5a5a5a')} />
+      </mesh>
+      {/* Flag pole + flag */}
+      <mesh castShadow position={[0, 3.5, 0]}>
+        <cylinderGeometry args={[0.025, 0.025, 1.4, 6]} />
         <meshStandardMaterial {...matProps('#4a3a2a')} />
       </mesh>
-      {/* Flag */}
-      <mesh position={[0.2, 4.3, 0]}>
+      <mesh ref={flagRef} position={[0.2, 4.0, 0]}>
         <boxGeometry args={[0.4, 0.25, 0.02]} />
-        <meshStandardMaterial color="#c9a84c" emissive="#c9a84c" emissiveIntensity={0.5} />
+        <meshStandardMaterial color="#c9a84c" emissive="#c9a84c" emissiveIntensity={0.6} />
       </mesh>
-      {/* Windows */}
-      {isActive && (
-        <>
-          <mesh position={[0.71, 1.8, 0]}>
-            <planeGeometry args={[0.25, 0.3]} />
-            <meshStandardMaterial color="#e8c97e" emissive="#e8c97e" emissiveIntensity={1.2} />
-          </mesh>
-          <mesh position={[-0.71, 1.8, 0]} rotation={[0, Math.PI, 0]}>
-            <planeGeometry args={[0.25, 0.3]} />
-            <meshStandardMaterial color="#e8c97e" emissive="#e8c97e" emissiveIntensity={1.2} />
-          </mesh>
-        </>
-      )}
+      {/* Window slots */}
+      {[
+        [0.91, 1.5, 0.3], [0.91, 1.5, -0.3],
+        [-0.91, 1.5, 0.3], [-0.91, 1.5, -0.3],
+        [0.3, 1.5, 0.91], [-0.3, 1.5, 0.91],
+      ].map((p, i) => (
+        <mesh key={`win-${i}`} position={[p[0], p[1], p[2]]}>
+          <boxGeometry args={[0.08, 0.2, 0.08]} />
+          <meshStandardMaterial color="#1a1a2a" emissive={isActive ? '#e8c97e' : '#000'} emissiveIntensity={isActive ? 0.8 : 0} />
+        </mesh>
+      ))}
       {/* Door */}
       {isActive && (
-        <mesh position={[0, 0.35, 0.71]}>
-          <planeGeometry args={[0.35, 0.5]} />
+        <mesh position={[0, 0.45, 0.92]}>
+          <planeGeometry args={[0.4, 0.7]} />
           <meshStandardMaterial color="#3c2a0a" emissive="#1a0a00" emissiveIntensity={0.2} />
         </mesh>
       )}
@@ -205,47 +242,99 @@ function HQModel({ matProps, isActive }: ModelProps) {
 }
 
 function FarmModel({ matProps, isActive }: ModelProps) {
+  const windmillRef = useRef<THREE.Group>(null)
+
+  useFrame((state) => {
+    if (windmillRef.current) {
+      windmillRef.current.rotation.z = state.clock.elapsedTime * 0.5
+    }
+  })
+
   return (
     <group>
       {/* Base */}
       <mesh castShadow receiveShadow position={[0, 0.1, 0]}>
-        <boxGeometry args={[2.6, 0.2, 2.0]} />
-        <meshStandardMaterial {...matProps('#3a5c2a', '#1a3a15', 0.05)} />
+        <boxGeometry args={[3.0, 0.2, 2.4]} />
+        <meshStandardMaterial {...matProps('#5a8a3c', '#3a5a2a', 0.05)} />
       </mesh>
-      {/* Main barn body */}
-      <mesh castShadow receiveShadow position={[0, 0.65, 0]}>
-        <boxGeometry args={[2.0, 0.9, 1.4]} />
-        <meshStandardMaterial {...matProps('#2d5a27', '#1a3a15', 0.1)} />
+      {/* Barn body */}
+      <mesh castShadow receiveShadow position={[0, 0.75, 0]}>
+        <boxGeometry args={[2.0, 1.1, 1.5]} />
+        <meshStandardMaterial {...matProps('#7c5c35', '#5c3d1e', 0.1)} />
       </mesh>
-      {/* Pitched roof (two angled planes) */}
-      <mesh castShadow position={[0, 1.3, 0]} rotation={[0, 0, Math.PI / 6]}>
-        <boxGeometry args={[1.2, 0.05, 1.5]} />
-        <meshStandardMaterial {...matProps('#4a7c3c', '#2d5a27', 0.1)} />
+      {/* Double-pitched roof */}
+      <mesh castShadow position={[-0.3, 1.55, 0]} rotation={[0, 0, Math.PI / 5]}>
+        <boxGeometry args={[1.3, 0.06, 1.6]} />
+        <meshStandardMaterial {...matProps('#c8a85a', '#a08040', 0.1)} />
       </mesh>
-      <mesh castShadow position={[0, 1.3, 0]} rotation={[0, 0, -Math.PI / 6]}>
-        <boxGeometry args={[1.2, 0.05, 1.5]} />
-        <meshStandardMaterial {...matProps('#4a7c3c', '#2d5a27', 0.1)} />
+      <mesh castShadow position={[0.3, 1.55, 0]} rotation={[0, 0, -Math.PI / 5]}>
+        <boxGeometry args={[1.3, 0.06, 1.6]} />
+        <meshStandardMaterial {...matProps('#c8a85a', '#a08040', 0.1)} />
+      </mesh>
+      {/* Small house */}
+      <mesh castShadow receiveShadow position={[-1.1, 0.5, 0.4]}>
+        <boxGeometry args={[0.7, 0.7, 0.6]} />
+        <meshStandardMaterial {...matProps('#8b7355', '#5c4a2a', 0.1)} />
+      </mesh>
+      <mesh castShadow position={[-1.1, 0.95, 0.4]} rotation={[0, 0, Math.PI / 6]}>
+        <boxGeometry args={[0.5, 0.04, 0.7]} />
+        <meshStandardMaterial {...matProps('#c8a85a', '#a08040', 0.1)} />
+      </mesh>
+      {/* Well */}
+      <mesh castShadow position={[1.0, 0.3, -0.6]}>
+        <cylinderGeometry args={[0.15, 0.18, 0.4, 8]} />
+        <meshStandardMaterial {...matProps('#7a7a7a')} />
+      </mesh>
+      <mesh castShadow position={[1.0, 0.6, -0.6]}>
+        <boxGeometry args={[0.04, 0.25, 0.35]} />
+        <meshStandardMaterial {...matProps('#5c3d1e')} />
+      </mesh>
+      <mesh castShadow position={[1.0, 0.73, -0.6]}>
+        <boxGeometry args={[0.35, 0.04, 0.04]} />
+        <meshStandardMaterial {...matProps('#5c3d1e')} />
       </mesh>
       {/* Fence posts */}
-      {[[1.1, 0, 0.8], [-1.1, 0, 0.8], [1.1, 0, -0.8], [-1.1, 0, -0.8]].map((p, i) => (
-        <mesh key={`post-${i}`} castShadow position={[p[0], 0.4, p[2]]}>
-          <boxGeometry args={[0.06, 0.6, 0.06]} />
-          <meshStandardMaterial {...matProps('#5c4a2a')} />
+      {[
+        [1.3, 0, 0.9], [-1.3, 0, 0.9], [1.3, 0, -0.9], [-1.3, 0, -0.9],
+        [0, 0, 0.9], [0, 0, -0.9], [1.3, 0, 0], [-1.3, 0, 0],
+      ].map((p, i) => (
+        <mesh key={`post-${i}`} castShadow position={[p[0], 0.35, p[2]]}>
+          <boxGeometry args={[0.05, 0.5, 0.05]} />
+          <meshStandardMaterial {...matProps('#5c3d1e')} />
         </mesh>
       ))}
       {/* Fence rails */}
-      <mesh position={[1.1, 0.35, 0]}><boxGeometry args={[0.04, 0.04, 1.6]} /><meshStandardMaterial {...matProps('#5c4a2a')} /></mesh>
-      <mesh position={[-1.1, 0.35, 0]}><boxGeometry args={[0.04, 0.04, 1.6]} /><meshStandardMaterial {...matProps('#5c4a2a')} /></mesh>
-      <mesh position={[0, 0.35, 0.8]}><boxGeometry args={[2.2, 0.04, 0.04]} /><meshStandardMaterial {...matProps('#5c4a2a')} /></mesh>
-      <mesh position={[0, 0.35, -0.8]}><boxGeometry args={[2.2, 0.04, 0.04]} /><meshStandardMaterial {...matProps('#5c4a2a')} /></mesh>
-      {/* Hay bale */}
-      <mesh castShadow position={[0.7, 0.3, 0.5]} rotation={[Math.PI / 2, 0, 0]}>
-        <cylinderGeometry args={[0.15, 0.15, 0.2, 8]} />
-        <meshStandardMaterial {...matProps('#c9a84c', '#8b7355', 0.1)} />
+      <mesh position={[1.3, 0.35, 0]}><boxGeometry args={[0.04, 0.04, 1.8]} /><meshStandardMaterial {...matProps('#5c3d1e')} /></mesh>
+      <mesh position={[-1.3, 0.35, 0]}><boxGeometry args={[0.04, 0.04, 1.8]} /><meshStandardMaterial {...matProps('#5c3d1e')} /></mesh>
+      <mesh position={[0, 0.35, 0.9]}><boxGeometry args={[2.6, 0.04, 0.04]} /><meshStandardMaterial {...matProps('#5c3d1e')} /></mesh>
+      <mesh position={[0, 0.35, -0.9]}><boxGeometry args={[2.6, 0.04, 0.04]} /><meshStandardMaterial {...matProps('#5c3d1e')} /></mesh>
+      {/* Hay bales */}
+      {[
+        [0.6, 0.28, 0.5],
+        [0.3, 0.28, 0.6],
+        [-0.5, 0.28, -0.4],
+      ].map((p, i) => (
+        <mesh key={`hay-${i}`} castShadow position={[p[0], p[1], p[2]]} rotation={[Math.PI / 2, i * 0.5, 0]}>
+          <cylinderGeometry args={[0.12, 0.12, 0.18, 8]} />
+          <meshStandardMaterial {...matProps('#c8a85a', '#a08040', 0.15)} />
+        </mesh>
+      ))}
+      {/* Windmill */}
+      <mesh castShadow position={[1.2, 0.8, 0.6]}>
+        <cylinderGeometry args={[0.15, 0.2, 1.2, 6]} />
+        <meshStandardMaterial {...matProps('#8b7355')} />
       </mesh>
+      <group ref={windmillRef} position={[1.2, 1.4, 0.75]}>
+        {[0, Math.PI / 2, Math.PI, Math.PI * 1.5].map((rot, i) => (
+          <mesh key={`blade-${i}`} rotation={[0, 0, rot]} position={[Math.cos(rot) * 0.25, Math.sin(rot) * 0.25, 0]}>
+            <boxGeometry args={[0.06, 0.5, 0.02]} />
+            <meshStandardMaterial {...matProps('#c8a85a')} />
+          </mesh>
+        ))}
+      </group>
       {/* Door */}
       {isActive && (
-        <mesh position={[0, 0.4, 0.71]}>
+        <mesh position={[0, 0.45, 0.76]}>
           <planeGeometry args={[0.4, 0.6]} />
           <meshStandardMaterial color="#3c2a0a" emissive="#1a0a00" emissiveIntensity={0.2} />
         </mesh>
@@ -257,39 +346,70 @@ function FarmModel({ matProps, isActive }: ModelProps) {
 function LibraryModel({ matProps, isActive }: ModelProps) {
   return (
     <group>
-      {/* Base */}
-      <mesh castShadow receiveShadow position={[0, 0.1, 0]}>
-        <boxGeometry args={[2.2, 0.2, 2.0]} />
-        <meshStandardMaterial {...matProps('#5c4a2a', '#3c2a0a', 0.05)} />
+      {/* Long rectangular base */}
+      <mesh castShadow receiveShadow position={[0, 0.15, 0]}>
+        <boxGeometry args={[2.8, 0.3, 1.8]} />
+        <meshStandardMaterial {...matProps('#8a7a6a', '#5a4a3a', 0.05)} />
       </mesh>
-      {/* Main body */}
-      <mesh castShadow receiveShadow position={[0, 1.1, 0]}>
-        <boxGeometry args={[1.6, 1.8, 1.6]} />
-        <meshStandardMaterial {...matProps('#7c5c3e', '#3c2a0a', 0.1)} />
+      {/* Main hall body */}
+      <mesh castShadow receiveShadow position={[0, 1.0, 0]}>
+        <boxGeometry args={[2.4, 1.4, 1.5]} />
+        <meshStandardMaterial {...matProps('#8a7a6a', '#5a4a3a', 0.1)} />
       </mesh>
-      {/* 4 columns */}
-      {[[0.65, 0, 0.65], [-0.65, 0, 0.65], [0.65, 0, -0.65], [-0.65, 0, -0.65]].map((p, i) => (
-        <mesh key={i} castShadow position={[p[0], 1.0, p[2]]}>
-          <cylinderGeometry args={[0.08, 0.1, 1.8, 8]} />
-          <meshStandardMaterial {...matProps('#a08060', '#5c4a2a', 0.1)} />
-        </mesh>
-      ))}
-      {/* Pediment / roof cap */}
-      <mesh castShadow position={[0, 2.3, 0]}>
-        <coneGeometry args={[1.3, 0.7, 4]} />
-        <meshStandardMaterial {...matProps('#5c3a1a', '#3c2a0a', 0.1)} />
+      {/* Steep Viking-style long roof */}
+      <mesh castShadow position={[-0.4, 2.1, 0]} rotation={[0, 0, Math.PI / 4]}>
+        <boxGeometry args={[1.4, 0.06, 1.6]} />
+        <meshStandardMaterial {...matProps('#3d2b1a', '#2a1a0a', 0.05)} />
       </mesh>
-      {/* Window glow */}
+      <mesh castShadow position={[0.4, 2.1, 0]} rotation={[0, 0, -Math.PI / 4]}>
+        <boxGeometry args={[1.4, 0.06, 1.6]} />
+        <meshStandardMaterial {...matProps('#3d2b1a', '#2a1a0a', 0.05)} />
+      </mesh>
+      {/* End gable decorations - triangles */}
+      <mesh castShadow position={[0, 2.15, 0.8]}>
+        <coneGeometry args={[0.6, 0.9, 3]} />
+        <meshStandardMaterial {...matProps('#3d2b1a', '#2a1a0a', 0.05)} />
+      </mesh>
+      <mesh castShadow position={[0, 2.15, -0.8]}>
+        <coneGeometry args={[0.6, 0.9, 3]} />
+        <meshStandardMaterial {...matProps('#3d2b1a', '#2a1a0a', 0.05)} />
+      </mesh>
+      {/* Entrance porch - 2 posts + small roof */}
+      <mesh castShadow position={[0.25, 0.7, 0.95]}>
+        <cylinderGeometry args={[0.06, 0.06, 1.1, 6]} />
+        <meshStandardMaterial {...matProps('#5c3d1e')} />
+      </mesh>
+      <mesh castShadow position={[-0.25, 0.7, 0.95]}>
+        <cylinderGeometry args={[0.06, 0.06, 1.1, 6]} />
+        <meshStandardMaterial {...matProps('#5c3d1e')} />
+      </mesh>
+      <mesh castShadow position={[0, 1.3, 1.05]}>
+        <boxGeometry args={[0.8, 0.06, 0.3]} />
+        <meshStandardMaterial {...matProps('#3d2b1a')} />
+      </mesh>
+      {/* Decorative carved post at entrance */}
+      <mesh castShadow position={[0, 0.9, 1.1]}>
+        <cylinderGeometry args={[0.04, 0.05, 1.5, 6]} />
+        <meshStandardMaterial {...matProps('#8b2020', '#5a1010', 0.2)} />
+      </mesh>
+      {/* Windows with orange glow */}
       {isActive && (
-        <mesh position={[0.81, 1.3, 0]}>
-          <planeGeometry args={[0.01, 0.5]} />
-          <meshStandardMaterial color="#e8c97e" emissive="#e8c97e" emissiveIntensity={1.5} />
-        </mesh>
+        <>
+          {[
+            [1.21, 1.1, 0.3], [1.21, 1.1, -0.3],
+            [-1.21, 1.1, 0.3], [-1.21, 1.1, -0.3],
+          ].map((p, i) => (
+            <mesh key={`win-${i}`} position={[p[0], p[1], p[2]]}>
+              <planeGeometry args={[0.01, 0.4]} />
+              <meshStandardMaterial color="#e8a040" emissive="#e8a040" emissiveIntensity={1.2} />
+            </mesh>
+          ))}
+        </>
       )}
       {/* Door */}
       {isActive && (
-        <mesh position={[0, 0.4, 0.81]}>
-          <planeGeometry args={[0.3, 0.5]} />
+        <mesh position={[0, 0.5, 0.91]}>
+          <planeGeometry args={[0.35, 0.7]} />
           <meshStandardMaterial color="#3c2a0a" emissive="#1a0a00" emissiveIntensity={0.2} />
         </mesh>
       )}
@@ -298,54 +418,80 @@ function LibraryModel({ matProps, isActive }: ModelProps) {
 }
 
 function LabModel({ matProps, isActive }: ModelProps) {
+  const smokeRef = useRef<THREE.Mesh>(null)
+
+  useFrame((state) => {
+    if (smokeRef.current) {
+      const t = state.clock.elapsedTime
+      smokeRef.current.scale.setScalar(0.8 + Math.sin(t * 2) * 0.3)
+      smokeRef.current.position.y = 2.8 + Math.sin(t * 1.5) * 0.1
+    }
+  })
+
   return (
     <group>
-      {/* Base */}
-      <mesh castShadow receiveShadow position={[0, 0.1, 0]}>
-        <boxGeometry args={[2.0, 0.2, 1.8]} />
-        <meshStandardMaterial {...matProps('#1a3a5c', '#0a2a4c', 0.05)} />
+      {/* Stone tower base */}
+      <mesh castShadow receiveShadow position={[0, 0.9, 0]}>
+        <boxGeometry args={[1.6, 1.6, 1.6]} />
+        <meshStandardMaterial {...matProps('#7a8a8a', '#4a5a5a', 0.1)} />
       </mesh>
-      {/* Main body */}
-      <mesh castShadow receiveShadow position={[0, 1.0, 0]}>
-        <boxGeometry args={[1.3, 1.5, 1.3]} />
-        <meshStandardMaterial {...matProps('#2a4a6c', '#0a2a4c', 0.15)} />
+      {/* Conical witch-hat roof */}
+      <mesh castShadow position={[0, 2.2, 0]}>
+        <coneGeometry args={[1.1, 1.2, 8]} />
+        <meshStandardMaterial {...matProps('#2a3a4a', '#1a2a3a', 0.1)} />
       </mesh>
       {/* Glowing windows */}
       {isActive && (
         <>
-          <mesh position={[0.66, 1.2, 0.2]}>
-            <planeGeometry args={[0.01, 0.3]} />
-            <meshStandardMaterial color="#06b6d4" emissive="#06b6d4" emissiveIntensity={2.0} />
+          <mesh position={[0.81, 0.9, 0.25]}>
+            <planeGeometry args={[0.01, 0.35]} />
+            <meshStandardMaterial color="#00aaff" emissive="#00aaff" emissiveIntensity={0.5} />
           </mesh>
-          <mesh position={[0.66, 1.2, -0.2]}>
-            <planeGeometry args={[0.01, 0.3]} />
-            <meshStandardMaterial color="#06b6d4" emissive="#06b6d4" emissiveIntensity={2.0} />
+          <mesh position={[0.81, 0.9, -0.25]}>
+            <planeGeometry args={[0.01, 0.35]} />
+            <meshStandardMaterial color="#00aaff" emissive="#00aaff" emissiveIntensity={0.5} />
+          </mesh>
+          <mesh position={[-0.81, 0.9, 0]}>
+            <planeGeometry args={[0.01, 0.35]} />
+            <meshStandardMaterial color="#00aaff" emissive="#00aaff" emissiveIntensity={0.5} />
           </mesh>
         </>
       )}
+      {/* Chimney */}
+      <mesh castShadow position={[0.5, 2.2, 0.5]}>
+        <cylinderGeometry args={[0.1, 0.12, 0.6, 6]} />
+        <meshStandardMaterial {...matProps('#5a5a5a')} />
+      </mesh>
+      {/* Smoke */}
+      <mesh ref={smokeRef} position={[0.5, 2.8, 0.5]}>
+        <sphereGeometry args={[0.15, 8, 8]} />
+        <meshStandardMaterial color="#aaaaaa" transparent opacity={0.3} />
+      </mesh>
       {/* Antenna */}
-      <mesh castShadow position={[0.3, 2.2, 0.3]}>
-        <cylinderGeometry args={[0.02, 0.02, 1.0, 6]} />
+      <mesh castShadow position={[-0.4, 2.6, -0.4]}>
+        <cylinderGeometry args={[0.02, 0.02, 0.8, 6]} />
         <meshStandardMaterial {...matProps('#6b7280')} />
       </mesh>
-      <mesh position={[0.3, 2.75, 0.3]}>
+      <mesh position={[-0.4, 3.05, -0.4]}>
         <sphereGeometry args={[0.06, 8, 8]} />
         <meshStandardMaterial color="#10b981" emissive="#10b981" emissiveIntensity={2.0} />
       </mesh>
-      {/* Exhaust pipes */}
-      <mesh castShadow position={[0.5, 1.5, 0.66]}>
-        <cylinderGeometry args={[0.08, 0.08, 0.6, 8]} />
-        <meshStandardMaterial {...matProps('#4a4a4a', '#2a2a2a', 0.1)} />
+      {/* Barrel props outside */}
+      <mesh castShadow position={[1.0, 0.2, 0.6]}>
+        <cylinderGeometry args={[0.12, 0.14, 0.35, 8]} />
+        <meshStandardMaterial {...matProps('#5c3d1e')} />
       </mesh>
-      <mesh castShadow position={[-0.5, 1.5, 0.66]}>
-        <cylinderGeometry args={[0.08, 0.08, 0.6, 8]} />
-        <meshStandardMaterial {...matProps('#4a4a4a', '#2a2a2a', 0.1)} />
+      <mesh castShadow position={[1.2, 0.2, 0.3]}>
+        <cylinderGeometry args={[0.1, 0.12, 0.3, 8]} />
+        <meshStandardMaterial {...matProps('#5c3d1e')} />
       </mesh>
-      {/* Roof */}
-      <mesh castShadow position={[0, 1.9, 0]}>
-        <boxGeometry args={[1.5, 0.1, 1.5]} />
-        <meshStandardMaterial {...matProps('#1a3a5c', '#0a2a4c', 0.1)} />
-      </mesh>
+      {/* Door */}
+      {isActive && (
+        <mesh position={[0, 0.4, 0.81]}>
+          <planeGeometry args={[0.35, 0.6]} />
+          <meshStandardMaterial color="#3c2a0a" emissive="#1a0a00" emissiveIntensity={0.2} />
+        </mesh>
+      )}
     </group>
   )
 }
@@ -354,115 +500,163 @@ function ServerModel({ matProps, isActive }: ModelProps) {
   const lightRef1 = useRef<THREE.Mesh>(null)
   const lightRef2 = useRef<THREE.Mesh>(null)
   const lightRef3 = useRef<THREE.Mesh>(null)
-  const lightRef4 = useRef<THREE.Mesh>(null)
 
   useFrame((state) => {
     if (!isActive) return
     const t = state.clock.elapsedTime
-    const refs = [lightRef1, lightRef2, lightRef3, lightRef4]
+    const refs = [lightRef1, lightRef2, lightRef3]
     refs.forEach((ref, i) => {
       if (ref.current) {
         const mat = ref.current.material as THREE.MeshStandardMaterial
-        mat.emissiveIntensity = Math.sin(t * 3 + i * 1.5) > 0 ? 3.0 : 0.5
+        mat.emissiveIntensity = 1.0 + Math.sin(t * 3 + i * 2.0) * 2.0
       }
     })
   })
 
   return (
     <group>
-      {/* Base */}
-      <mesh castShadow receiveShadow position={[0, 0.1, 0]}>
-        <boxGeometry args={[2.0, 0.2, 1.6]} />
-        <meshStandardMaterial {...matProps('#3a3a3a', '#1a1a1a', 0.05)} />
+      {/* Long low base */}
+      <mesh castShadow receiveShadow position={[0, 0.15, 0]}>
+        <boxGeometry args={[3.0, 0.3, 1.6]} />
+        <meshStandardMaterial {...matProps('#8a7a6a', '#5a4a3a', 0.05)} />
       </mesh>
-      {/* Main rack body */}
+      {/* Main longhouse body */}
       <mesh castShadow receiveShadow position={[0, 0.85, 0]}>
-        <boxGeometry args={[1.6, 1.3, 1.1]} />
-        <meshStandardMaterial {...matProps('#4a4a4a', '#2a2a2a', 0.1)} />
+        <boxGeometry args={[2.6, 1.1, 1.3]} />
+        <meshStandardMaterial {...matProps('#7c5c35', '#5c3d1e', 0.1)} />
       </mesh>
-      {/* Server blades */}
-      {[0.55, 0.85, 1.15].map((y, i) => (
-        <mesh key={i} position={[0, y, 0.01]}>
-          <boxGeometry args={[1.3, 0.18, 0.9]} />
-          <meshStandardMaterial
-            color="#3a3a5c"
-            transparent
-            opacity={0.7}
-            roughness={0.3}
-            metalness={0.3}
-          />
+      {/* Thatched roof - steep pitch */}
+      <mesh castShadow position={[-0.35, 1.7, 0]} rotation={[0, 0, Math.PI / 5]}>
+        <boxGeometry args={[1.2, 0.06, 1.4]} />
+        <meshStandardMaterial {...matProps('#c8a85a', '#a08040', 0.1)} />
+      </mesh>
+      <mesh castShadow position={[0.35, 1.7, 0]} rotation={[0, 0, -Math.PI / 5]}>
+        <boxGeometry args={[1.2, 0.06, 1.4]} />
+        <meshStandardMaterial {...matProps('#c8a85a', '#a08040', 0.1)} />
+      </mesh>
+      {/* Side extension/wing */}
+      <mesh castShadow receiveShadow position={[1.5, 0.6, 0]}>
+        <boxGeometry args={[0.8, 0.7, 1.0]} />
+        <meshStandardMaterial {...matProps('#7c5c35', '#5c3d1e', 0.1)} />
+      </mesh>
+      <mesh castShadow position={[1.5, 1.05, 0]}>
+        <boxGeometry args={[0.9, 0.1, 1.1]} />
+        <meshStandardMaterial {...matProps('#c8a85a')} />
+      </mesh>
+      {/* Exhaust vents on roof */}
+      {[[-0.5, 2.0, 0], [0, 2.05, 0], [0.5, 2.0, 0]].map((p, i) => (
+        <mesh key={`vent-${i}`} castShadow position={[p[0], p[1], p[2]]}>
+          <cylinderGeometry args={[0.06, 0.08, 0.2, 6]} />
+          <meshStandardMaterial {...matProps('#5a5a5a')} />
         </mesh>
       ))}
-      {/* 4 indicator lights */}
-      <mesh ref={lightRef1} position={[0.6, 0.55, 0.56]}>
-        <sphereGeometry args={[0.04, 8, 8]} />
-        <meshStandardMaterial color="#84cc16" emissive="#84cc16" emissiveIntensity={2.0} />
+      {/* Blue indicator lights (blinking) */}
+      <mesh ref={lightRef1} position={[0.4, 0.6, 0.66]}>
+        <sphereGeometry args={[0.05, 8, 8]} />
+        <meshStandardMaterial color="#00aaff" emissive="#00aaff" emissiveIntensity={2.0} />
       </mesh>
-      <mesh ref={lightRef2} position={[0.6, 0.85, 0.56]}>
-        <sphereGeometry args={[0.04, 8, 8]} />
-        <meshStandardMaterial color="#eab308" emissive="#eab308" emissiveIntensity={2.0} />
+      <mesh ref={lightRef2} position={[0, 0.6, 0.66]}>
+        <sphereGeometry args={[0.05, 8, 8]} />
+        <meshStandardMaterial color="#00aaff" emissive="#00aaff" emissiveIntensity={2.0} />
       </mesh>
-      <mesh ref={lightRef3} position={[0.6, 1.15, 0.56]}>
-        <sphereGeometry args={[0.04, 8, 8]} />
-        <meshStandardMaterial color="#84cc16" emissive="#84cc16" emissiveIntensity={2.0} />
+      <mesh ref={lightRef3} position={[-0.4, 0.6, 0.66]}>
+        <sphereGeometry args={[0.05, 8, 8]} />
+        <meshStandardMaterial color="#00aaff" emissive="#00aaff" emissiveIntensity={2.0} />
       </mesh>
-      <mesh ref={lightRef4} position={[-0.6, 0.85, 0.56]}>
-        <sphereGeometry args={[0.04, 8, 8]} />
-        <meshStandardMaterial color="#eab308" emissive="#eab308" emissiveIntensity={2.0} />
-      </mesh>
-      {/* Top */}
-      <mesh castShadow position={[0, 1.55, 0]}>
-        <boxGeometry args={[1.7, 0.1, 1.2]} />
-        <meshStandardMaterial {...matProps('#3a3a3a', '#1a1a1a', 0.05)} />
-      </mesh>
+      {/* Large entrance doors */}
+      {isActive && (
+        <mesh position={[0, 0.5, 0.66]}>
+          <planeGeometry args={[0.6, 0.7]} />
+          <meshStandardMaterial color="#5c3d1e" emissive="#3c2a0a" emissiveIntensity={0.15} />
+        </mesh>
+      )}
     </group>
   )
 }
 
 function BarracksModel({ matProps, isActive }: ModelProps) {
+  const fireRef = useRef<THREE.Mesh>(null)
+
+  useFrame((state) => {
+    if (fireRef.current) {
+      const t = state.clock.elapsedTime
+      const mat = fireRef.current.material as THREE.MeshStandardMaterial
+      mat.emissiveIntensity = 1.5 + Math.sin(t * 8) * 0.8
+      fireRef.current.scale.y = 0.8 + Math.sin(t * 6) * 0.3
+    }
+  })
+
   return (
     <group>
       {/* Base */}
       <mesh castShadow receiveShadow position={[0, 0.1, 0]}>
-        <boxGeometry args={[2.6, 0.2, 2.6]} />
-        <meshStandardMaterial {...matProps('#4a2a1a', '#2a1a0a', 0.05)} />
+        <boxGeometry args={[3.0, 0.2, 3.0]} />
+        <meshStandardMaterial {...matProps('#8a7a6a', '#5a4a3a', 0.05)} />
       </mesh>
-      {/* Thick walls (4 segments) */}
-      <mesh castShadow receiveShadow position={[0, 0.8, 1.1]}>
-        <boxGeometry args={[2.4, 1.2, 0.2]} />
-        <meshStandardMaterial {...matProps('#6b1a1a', '#3a0a0a', 0.1)} />
+      {/* Stone wall segments forming courtyard */}
+      <mesh castShadow receiveShadow position={[0, 0.7, 1.2]}>
+        <boxGeometry args={[2.6, 1.0, 0.25]} />
+        <meshStandardMaterial {...matProps('#7a7a7a', '#5a5a5a', 0.1)} />
       </mesh>
-      <mesh castShadow receiveShadow position={[0, 0.8, -1.1]}>
-        <boxGeometry args={[2.4, 1.2, 0.2]} />
-        <meshStandardMaterial {...matProps('#6b1a1a', '#3a0a0a', 0.1)} />
+      <mesh castShadow receiveShadow position={[0, 0.7, -1.2]}>
+        <boxGeometry args={[2.6, 1.0, 0.25]} />
+        <meshStandardMaterial {...matProps('#7a7a7a', '#5a5a5a', 0.1)} />
       </mesh>
-      <mesh castShadow receiveShadow position={[1.1, 0.8, 0]}>
-        <boxGeometry args={[0.2, 1.2, 2.0]} />
-        <meshStandardMaterial {...matProps('#6b1a1a', '#3a0a0a', 0.1)} />
+      <mesh castShadow receiveShadow position={[1.2, 0.7, 0]}>
+        <boxGeometry args={[0.25, 1.0, 2.15]} />
+        <meshStandardMaterial {...matProps('#7a7a7a', '#5a5a5a', 0.1)} />
       </mesh>
-      <mesh castShadow receiveShadow position={[-1.1, 0.8, 0]}>
-        <boxGeometry args={[0.2, 1.2, 2.0]} />
-        <meshStandardMaterial {...matProps('#6b1a1a', '#3a0a0a', 0.1)} />
+      <mesh castShadow receiveShadow position={[-1.2, 0.7, 0]}>
+        <boxGeometry args={[0.25, 1.0, 2.15]} />
+        <meshStandardMaterial {...matProps('#7a7a7a', '#5a5a5a', 0.1)} />
       </mesh>
-      {/* Round corner towers */}
-      <mesh castShadow position={[1.1, 1.0, 1.1]}>
-        <cylinderGeometry args={[0.25, 0.3, 1.8, 8]} />
-        <meshStandardMaterial {...matProps('#8b2a2a', '#5c1a1a', 0.15)} />
+      {/* Corner watchtowers */}
+      {[
+        [1.2, 0, 1.2], [-1.2, 0, 1.2], [1.2, 0, -1.2], [-1.2, 0, -1.2]
+      ].map((p, i) => (
+        <group key={`tower-${i}`}>
+          <mesh castShadow position={[p[0], 0.9, p[2]]}>
+            <cylinderGeometry args={[0.22, 0.28, 1.6, 8]} />
+            <meshStandardMaterial {...matProps('#8b2020', '#5a1010', 0.15)} />
+          </mesh>
+          <mesh castShadow position={[p[0], 1.85, p[2]]}>
+            <coneGeometry args={[0.3, 0.4, 8]} />
+            <meshStandardMaterial {...matProps('#3d2b1a', '#2a1a0a', 0.05)} />
+          </mesh>
+        </group>
+      ))}
+      {/* Training dummy (cross shape) */}
+      <mesh castShadow position={[0.3, 0.6, 0]}>
+        <cylinderGeometry args={[0.03, 0.03, 0.8, 4]} />
+        <meshStandardMaterial {...matProps('#5c3d1e')} />
       </mesh>
-      <mesh castShadow position={[-1.1, 1.0, -1.1]}>
-        <cylinderGeometry args={[0.25, 0.3, 1.8, 8]} />
-        <meshStandardMaterial {...matProps('#8b2a2a', '#5c1a1a', 0.15)} />
+      <mesh castShadow position={[0.3, 0.8, 0]}>
+        <boxGeometry args={[0.5, 0.06, 0.06]} />
+        <meshStandardMaterial {...matProps('#5c3d1e')} />
       </mesh>
-      {/* Battlements */}
-      {[[-0.8, 0, 1.1], [-0.2, 0, 1.1], [0.4, 0, 1.1], [0.8, 0, -1.1], [0.2, 0, -1.1], [-0.4, 0, -1.1]].map((p, i) => (
-        <mesh key={i} castShadow position={[p[0], 1.55, p[2]]}>
-          <boxGeometry args={[0.2, 0.3, 0.22]} />
-          <meshStandardMaterial {...matProps('#6b1a1a', '#3a0a0a', 0.1)} />
+      {/* Fire pit */}
+      <mesh position={[-0.3, 0.22, 0.3]}>
+        <cylinderGeometry args={[0.2, 0.22, 0.08, 8]} />
+        <meshStandardMaterial color="#4a4a4a" />
+      </mesh>
+      <mesh ref={fireRef} position={[-0.3, 0.4, 0.3]}>
+        <coneGeometry args={[0.12, 0.3, 6]} />
+        <meshStandardMaterial color="#ff6600" emissive="#ff4400" emissiveIntensity={1.5} transparent opacity={0.85} />
+      </mesh>
+      {/* Weapon rack */}
+      <mesh castShadow position={[-0.5, 0.45, -0.6]}>
+        <boxGeometry args={[0.5, 0.06, 0.1]} />
+        <meshStandardMaterial {...matProps('#5c3d1e')} />
+      </mesh>
+      {[-0.65, -0.5, -0.35].map((x, i) => (
+        <mesh key={`weapon-${i}`} castShadow position={[x, 0.6, -0.6]} rotation={[0, 0, 0.1 * (i - 1)]}>
+          <boxGeometry args={[0.03, 0.35, 0.03]} />
+          <meshStandardMaterial {...matProps('#8a8a8a')} />
         </mesh>
       ))}
-      {/* Gate opening hint (door) */}
+      {/* Gate opening */}
       {isActive && (
-        <mesh position={[0, 0.4, 1.21]}>
+        <mesh position={[0, 0.4, 1.33]}>
           <planeGeometry args={[0.5, 0.6]} />
           <meshStandardMaterial color="#1a0a00" emissive="#1a0a00" emissiveIntensity={0.1} />
         </mesh>
@@ -476,11 +670,11 @@ function DefaultModel({ matProps, isActive }: ModelProps) {
     <group>
       <mesh castShadow receiveShadow position={[0, 0.6, 0]}>
         <boxGeometry args={[1.2, 1.2, 1.2]} />
-        <meshStandardMaterial {...matProps('#4a3a2a', '#2a1a0a', 0.1)} />
+        <meshStandardMaterial {...matProps('#7c5c35', '#5c3d1e', 0.1)} />
       </mesh>
       <mesh castShadow position={[0, 1.5, 0]}>
         <coneGeometry args={[0.9, 0.5, 4]} />
-        <meshStandardMaterial {...matProps('#6b7280', '#4a4a4a', 0.1)} />
+        <meshStandardMaterial {...matProps('#c8a85a', '#a08040', 0.1)} />
       </mesh>
       {isActive && (
         <mesh position={[0, 0.35, 0.61]}>

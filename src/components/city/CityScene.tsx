@@ -2,7 +2,7 @@
 
 import { useRef, useState, useEffect, useCallback } from 'react'
 import { Canvas, useThree } from '@react-three/fiber'
-import { OrbitControls, Stars, Grid } from '@react-three/drei'
+import { OrbitControls, Sky, Cloud, Grid } from '@react-three/drei'
 import { Suspense } from 'react'
 import * as THREE from 'three'
 import { Building } from './Building'
@@ -85,38 +85,42 @@ export default function CityScene() {
       camera={{ position: [12, 10, 12], fov: 50 }}
       shadows
       onCreated={({ scene }) => {
-        scene.fog = new THREE.Fog('#0d1117', 20, 50)
-        scene.background = new THREE.Color('#0d1117')
+        scene.background = new THREE.Color('#87CEEB')
       }}
     >
       <Suspense fallback={null}>
-        {/* Ambient — dark blue moonlight */}
-        <ambientLight intensity={0.3} color="#1a237e" />
-
-        {/* Directional — warm moonlight */}
-        <directionalLight
-          position={[10, 20, 10]}
-          intensity={1.0}
-          color="#ffe4b5"
-          castShadow
-          shadow-mapSize={[2048, 2048]}
-          shadow-camera-far={50}
-          shadow-camera-left={-20}
-          shadow-camera-right={20}
-          shadow-camera-top={20}
-          shadow-camera-bottom={-20}
+        {/* Bright Nordic daytime sky */}
+        <Sky
+          distance={450000}
+          sunPosition={[100, 20, 100]}
+          inclination={0.5}
+          azimuth={0.25}
+          turbidity={4}
+          rayleigh={0.5}
         />
 
-        {/* Campfire point light near HQ */}
-        <pointLight position={[0, 2, 1]} intensity={1.5} color="#c9a84c" distance={12} decay={2} />
-        <pointLight position={[0, 0.5, 0.5]} intensity={0.8} color="#e8c97e" distance={6} decay={2} />
+        {/* Bright daytime lighting */}
+        <ambientLight intensity={1.2} color="#fff8f0" />
 
-        {/* Accent lights */}
-        <pointLight position={[-6, 3, -4]} intensity={0.2} color="#2d5a27" distance={10} />
-        <pointLight position={[5, 3, 5]} intensity={0.15} color="#1a237e" distance={10} />
+        <directionalLight
+          position={[15, 30, 15]}
+          intensity={2.5}
+          color="#ffe8c0"
+          castShadow
+          shadow-mapSize={[4096, 4096]}
+          shadow-camera-far={80}
+          shadow-camera-left={-25}
+          shadow-camera-right={25}
+          shadow-camera-top={25}
+          shadow-camera-bottom={-25}
+        />
 
-        {/* Stars — night sky */}
-        <Stars radius={100} depth={50} count={4000} factor={4} saturation={0} fade speed={0.3} />
+        {/* Sky/ground color bounce */}
+        <hemisphereLight args={["#87CEEB", "#4a7c35", 0.6]} />
+
+        {/* Clouds */}
+        <Cloud position={[-20, 18, -20]} speed={0.1} opacity={0.6} />
+        <Cloud position={[25, 22, 10]} speed={0.08} opacity={0.5} />
 
         {/* Ground */}
         <Ground />
@@ -127,10 +131,10 @@ export default function CityScene() {
           position={[0, 0.01, 0]}
           cellSize={1}
           cellThickness={0.2}
-          cellColor="#1a2e1a"
+          cellColor="#4a7c35"
           sectionSize={4}
           sectionThickness={0.5}
-          sectionColor="#2d5a27"
+          sectionColor="#5a8a3c"
           fadeDistance={20}
           infiniteGrid
         />
