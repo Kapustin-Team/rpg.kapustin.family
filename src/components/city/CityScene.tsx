@@ -8,7 +8,12 @@ import { Ground } from './Ground'
 import { useGameStore } from '@/store/gameStore'
 
 export default function CityScene() {
-  const { buildings, tickResources } = useGameStore()
+  const { buildings, tickResources, loadFromStrapi, isLoaded } = useGameStore()
+
+  // Грузим данные из Strapi при старте
+  useEffect(() => {
+    if (!isLoaded) loadFromStrapi()
+  }, [isLoaded, loadFromStrapi])
 
   // Тикаем ресурсы каждые 5 секунд
   useEffect(() => {
