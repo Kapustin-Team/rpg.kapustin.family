@@ -14,14 +14,15 @@ const BUILDING_CONFIGS: Record<string, {
   width: number
   depth: number
   roofColor: string
+  roofHeight: number
 }> = {
-  tower:   { color: '#2a3a5c', emissive: '#1a2440', height: 3.0, width: 1.2, depth: 1.2, roofColor: '#f4c542' },
-  farm:    { color: '#4a6c3c', emissive: '#2a3c1c', height: 0.8, width: 2.0, depth: 1.5, roofColor: '#84cc16' },
-  library: { color: '#3c3060', emissive: '#1c1040', height: 1.8, width: 1.5, depth: 1.5, roofColor: '#7c3aed' },
-  lab:     { color: '#1a4a5c', emissive: '#0a2a3c', height: 1.5, width: 1.2, depth: 1.2, roofColor: '#06b6d4' },
-  server:  { color: '#1a2a1a', emissive: '#0a1a0a', height: 1.2, width: 1.0, depth: 1.0, roofColor: '#10b981' },
-  market:  { color: '#5c3a1a', emissive: '#3c2a0a', height: 1.0, width: 1.8, depth: 1.8, roofColor: '#f97316' },
-  default: { color: '#2a3a4c', emissive: '#1a2a3c', height: 1.2, width: 1.2, depth: 1.2, roofColor: '#6b7280' },
+  tower:   { color: '#c9a84c', emissive: '#7c5c3e', height: 3.0, width: 1.4, depth: 1.4, roofColor: '#8b1a1a', roofHeight: 1.0 },
+  farm:    { color: '#2d5a27', emissive: '#1a3a15', height: 0.9, width: 2.2, depth: 1.6, roofColor: '#4a7c3c', roofHeight: 0.6 },
+  library: { color: '#7c5c3e', emissive: '#3c2a0a', height: 1.8, width: 1.6, depth: 1.6, roofColor: '#5c3a1a', roofHeight: 0.7 },
+  lab:     { color: '#2a4a6c', emissive: '#0a2a4c', height: 1.5, width: 1.3, depth: 1.3, roofColor: '#1a3a5c', roofHeight: 0.6 },
+  server:  { color: '#4a4a4a', emissive: '#2a2a2a', height: 1.2, width: 1.1, depth: 1.1, roofColor: '#6b7280', roofHeight: 0.5 },
+  market:  { color: '#7c5c3e', emissive: '#5c3a1a', height: 1.0, width: 2.0, depth: 2.0, roofColor: '#c9a84c', roofHeight: 0.7 },
+  default: { color: '#4a3a2a', emissive: '#2a1a0a', height: 1.2, width: 1.2, depth: 1.2, roofColor: '#6b7280', roofHeight: 0.5 },
 }
 
 interface BuildingProps {
@@ -29,6 +30,7 @@ interface BuildingProps {
 }
 
 export function Building({ building }: BuildingProps) {
+  const groupRef = useRef<THREE.Group>(null)
   const meshRef = useRef<THREE.Mesh>(null)
   const [hovered, setHovered] = useState(false)
   const { setSelectedBuilding, setIsPanelOpen } = useGameStore()
@@ -41,11 +43,18 @@ export function Building({ building }: BuildingProps) {
   const scaleY = isConstructing ? (building.constructionProgress / 100) : 1.0
 
   useFrame((state) => {
-    if (!meshRef.current) return
-    if (hovered) {
-      meshRef.current.position.y = building.position[1] + Math.sin(state.clock.elapsedTime * 2) * 0.05 + 0.05
-    } else {
-      meshRef.current.position.y = building.position[1]
+    if (!groupRef.current) return
+    // Gentle sway on Y axis (sin wave, 0.3 deg max)
+    const swayAngle = Math.sin(state.clock.elapsedTime * 0.8 + building.position[0]) * 0.005
+    groupRef.current.rotation.y = swayAngle
+
+    // Hover bob
+    if (meshRef.current) {
+      if (hovered) {
+        meshRef.current.position.y = (config.height * scaleY) / 2 + Math.sin(state.clock.elapsedTime * 2) * 0.05 + 0.05
+      } else {
+        meshRef.current.position.y = (config.height * scaleY) / 2
+      }
     }
   })
 
@@ -55,8 +64,8 @@ export function Building({ building }: BuildingProps) {
   }
 
   return (
-    <group position={building.position}>
-      {/* Основное здание */}
+    <group position={building.position} ref={groupRef}>
+      {/* Main building body */}
       <mesh
         ref={meshRef}
         position={[0, (config.height * scaleY) / 2, 0]}
@@ -68,80 +77,115 @@ export function Building({ building }: BuildingProps) {
       >
         <boxGeometry args={[config.width, config.height * scaleY, config.depth]} />
         <meshStandardMaterial
-          color={hovered ? '#ffffff' : config.color}
-          emissive={config.emissive}
-          emissiveIntensity={hovered ? 0.3 : 0.1}
+          color={hovered ? '#e8c97e' : config.color}
+          emissive={hovered ? '#c9a84c' : config.emissive}
+          emissiveIntensity={hovered ? 0.5 : 0.15}
           transparent
           opacity={opacity}
-          roughness={0.7}
-          metalness={0.2}
+          roughness={0.85}
+          metalness={0.05}
         />
       </mesh>
 
-      {/* Крыша */}
+      {/* Roof — cone on top (North Gard style) */}
       {!isPlanned && (
-        <mesh position={[0, config.height * scaleY + 0.2, 0]} castShadow>
-          <coneGeometry args={[config.width * 0.7, 0.4, 4]} />
+        <mesh
+          position={[0, config.height * scaleY + config.roofHeight / 2, 0]}
+          castShadow
+        >
+          <coneGeometry args={[
+            Math.max(config.width, config.depth) * 0.75,
+            config.roofHeight,
+            4
+          ]} />
           <meshStandardMaterial
             color={config.roofColor}
             emissive={config.roofColor}
-            emissiveIntensity={0.2}
+            emissiveIntensity={hovered ? 0.3 : 0.1}
             transparent
             opacity={opacity}
+            roughness={0.9}
           />
         </mesh>
       )}
 
-      {/* Окна (только у активных) */}
+      {/* Windows — warm glow (active buildings only) */}
       {building.status === 'active' && (
         <>
-          <mesh position={[config.width / 2 + 0.01, config.height * 0.6, 0]}>
-            <planeGeometry args={[0.3, 0.3]} />
-            <meshStandardMaterial color={config.roofColor} emissive={config.roofColor} emissiveIntensity={0.8} />
+          <mesh position={[config.width / 2 + 0.01, config.height * 0.55, 0]}>
+            <planeGeometry args={[0.25, 0.3]} />
+            <meshStandardMaterial
+              color="#e8c97e"
+              emissive="#e8c97e"
+              emissiveIntensity={1.2}
+            />
           </mesh>
-          <mesh position={[-config.width / 2 - 0.01, config.height * 0.6, 0]} rotation={[0, Math.PI, 0]}>
-            <planeGeometry args={[0.3, 0.3]} />
-            <meshStandardMaterial color={config.roofColor} emissive={config.roofColor} emissiveIntensity={0.8} />
+          <mesh position={[-config.width / 2 - 0.01, config.height * 0.55, 0]} rotation={[0, Math.PI, 0]}>
+            <planeGeometry args={[0.25, 0.3]} />
+            <meshStandardMaterial
+              color="#e8c97e"
+              emissive="#e8c97e"
+              emissiveIntensity={1.2}
+            />
+          </mesh>
+          <mesh position={[0, config.height * 0.55, config.depth / 2 + 0.01]}>
+            <planeGeometry args={[0.25, 0.3]} />
+            <meshStandardMaterial
+              color="#e8c97e"
+              emissive="#e8c97e"
+              emissiveIntensity={1.0}
+            />
           </mesh>
         </>
       )}
 
-      {/* Прогресс стройки */}
+      {/* Door */}
+      {building.status === 'active' && (
+        <mesh position={[0, 0.25, config.depth / 2 + 0.01]}>
+          <planeGeometry args={[0.3, 0.5]} />
+          <meshStandardMaterial color="#3c2a0a" emissive="#1a0a00" emissiveIntensity={0.2} />
+        </mesh>
+      )}
+
+      {/* Construction progress */}
       {isConstructing && (
         <Html position={[0, config.height + 0.8, 0]} center distanceFactor={8}>
           <div style={{
-            background: 'rgba(10,15,26,0.9)',
-            border: '1px solid #f4c542',
-            borderRadius: 4,
+            background: 'rgba(13, 17, 23, 0.92)',
+            border: '1px solid #c9a84c',
+            borderRadius: 2,
             padding: '2px 8px',
-            color: '#f4c542',
+            color: '#c9a84c',
             fontSize: 11,
             whiteSpace: 'nowrap',
+            fontFamily: "'Courier New', monospace",
+            boxShadow: '0 0 10px rgba(201, 168, 76, 0.2)',
           }}>
-            🏗️ {building.constructionProgress}%
+            ⚒️ {building.constructionProgress}%
           </div>
         </Html>
       )}
 
-      {/* Название при наведении */}
+      {/* Name on hover */}
       {hovered && (
         <Text
-          position={[0, config.height + 0.6, 0]}
-          fontSize={0.2}
-          color="#f4c542"
+          position={[0, config.height + config.roofHeight + 0.3, 0]}
+          fontSize={0.22}
+          color="#c9a84c"
           anchorX="center"
           anchorY="bottom"
           outlineWidth={0.02}
-          outlineColor="#0a0f1a"
+          outlineColor="#0d1117"
+          font={undefined}
         >
           {building.name}
         </Text>
       )}
 
-      {/* Тень-основание */}
+      {/* Ground shadow */}
       <mesh position={[0, 0.01, 0]} receiveShadow rotation={[-Math.PI / 2, 0, 0]}>
-        <planeGeometry args={[config.width + 0.2, config.depth + 0.2]} />
-        <meshStandardMaterial color="#000000" transparent opacity={0.2} />
+        <planeGeometry args={[config.width + 0.4, config.depth + 0.4]} />
+        <meshStandardMaterial color="#000000" transparent opacity={0.25} />
       </mesh>
     </group>
   )

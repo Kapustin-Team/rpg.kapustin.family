@@ -5,16 +5,25 @@ import { HUD } from '@/components/ui/HUD'
 import { TaskPanel } from '@/components/ui/TaskPanel'
 import { ResourceBar } from '@/components/ui/ResourceBar'
 
-// Three.js работает только на клиенте
 const CityScene = dynamic(() => import('@/components/city/CityScene'), {
   ssr: false,
   loading: () => (
     <div style={{
       width: '100vw', height: '100vh', display: 'flex',
+      flexDirection: 'column',
       alignItems: 'center', justifyContent: 'center',
-      background: '#0a0f1a', color: '#f4c542', fontSize: 18
+      background: '#0d1117', gap: 20,
     }}>
-      Загрузка города...
+      <div className="ng-spinner" />
+      <div style={{
+        fontFamily: 'Cinzel, serif',
+        color: '#c9a84c',
+        fontSize: 18,
+        letterSpacing: 2,
+        animation: 'ng-pulse 2s ease-in-out infinite',
+      }}>
+        Loading your kingdom...
+      </div>
     </div>
   ),
 })

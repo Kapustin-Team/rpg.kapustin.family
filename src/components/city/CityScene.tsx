@@ -1,8 +1,9 @@
 'use client'
 
 import { Canvas } from '@react-three/fiber'
-import { OrbitControls, Sky, Stars, Grid, Environment } from '@react-three/drei'
+import { OrbitControls, Stars, Grid } from '@react-three/drei'
 import { Suspense, useEffect } from 'react'
+import * as THREE from 'three'
 import { Building } from './Building'
 import { Ground } from './Ground'
 import { useGameStore } from '@/store/gameStore'
@@ -10,12 +11,10 @@ import { useGameStore } from '@/store/gameStore'
 export default function CityScene() {
   const { buildings, tickResources, loadFromStrapi, isLoaded } = useGameStore()
 
-  // Грузим данные из Strapi при старте
   useEffect(() => {
     if (!isLoaded) loadFromStrapi()
   }, [isLoaded, loadFromStrapi])
 
-  // Тикаем ресурсы каждые 5 секунд
   useEffect(() => {
     const interval = setInterval(tickResources, 5000)
     return () => clearInterval(interval)
@@ -26,13 +25,20 @@ export default function CityScene() {
       style={{ width: '100vw', height: '100vh' }}
       camera={{ position: [12, 10, 12], fov: 50 }}
       shadows
+      onCreated={({ scene }) => {
+        scene.fog = new THREE.Fog('#0d1117', 20, 50)
+        scene.background = new THREE.Color('#0d1117')
+      }}
     >
       <Suspense fallback={null}>
-        {/* Освещение */}
-        <ambientLight intensity={0.4} />
+        {/* Ambient — dark blue moonlight */}
+        <ambientLight intensity={0.3} color="#1a237e" />
+
+        {/* Directional — warm moonlight */}
         <directionalLight
           position={[10, 20, 10]}
-          intensity={1.2}
+          intensity={1.0}
+          color="#ffe4b5"
           castShadow
           shadow-mapSize={[2048, 2048]}
           shadow-camera-far={50}
@@ -41,36 +47,41 @@ export default function CityScene() {
           shadow-camera-top={20}
           shadow-camera-bottom={-20}
         />
-        <pointLight position={[-5, 5, -5]} intensity={0.3} color="#7c3aed" />
-        <pointLight position={[5, 3, 5]} intensity={0.2} color="#06b6d4" />
 
-        {/* Небо и звёзды */}
-        <Sky sunPosition={[10, 5, 10]} turbidity={8} rayleigh={2} />
-        <Stars radius={100} depth={50} count={3000} factor={4} saturation={0} fade speed={0.5} />
+        {/* Campfire point light near HQ */}
+        <pointLight position={[0, 2, 1]} intensity={1.5} color="#c9a84c" distance={12} decay={2} />
+        <pointLight position={[0, 0.5, 0.5]} intensity={0.8} color="#e8c97e" distance={6} decay={2} />
 
-        {/* Земля */}
+        {/* Accent lights */}
+        <pointLight position={[-6, 3, -4]} intensity={0.2} color="#2d5a27" distance={10} />
+        <pointLight position={[5, 3, 5]} intensity={0.15} color="#1a237e" distance={10} />
+
+        {/* Stars — night sky */}
+        <Stars radius={100} depth={50} count={4000} factor={4} saturation={0} fade speed={0.3} />
+
+        {/* Ground */}
         <Ground />
 
-        {/* Сетка */}
+        {/* Subtle grid overlay */}
         <Grid
           args={[30, 30]}
           position={[0, 0.01, 0]}
           cellSize={1}
-          cellThickness={0.3}
-          cellColor="#1a2540"
+          cellThickness={0.2}
+          cellColor="#1a2e1a"
           sectionSize={4}
-          sectionThickness={0.8}
-          sectionColor="#243060"
-          fadeDistance={25}
+          sectionThickness={0.5}
+          sectionColor="#2d5a27"
+          fadeDistance={20}
           infiniteGrid
         />
 
-        {/* Постройки */}
+        {/* Buildings */}
         {buildings.map((building) => (
           <Building key={building.id} building={building} />
         ))}
 
-        {/* Управление камерой */}
+        {/* Camera controls */}
         <OrbitControls
           enablePan
           enableZoom

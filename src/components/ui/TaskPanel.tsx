@@ -3,61 +3,67 @@
 import { useGameStore, Task } from '@/store/gameStore'
 
 const PRIORITY_COLORS = {
-  low: '#6b7280',
-  medium: '#f4c542',
-  high: '#f97316',
-  critical: '#ef4444',
+  low: '#2d5a27',
+  medium: '#c9a84c',
+  high: '#d97706',
+  critical: '#8b1a1a',
 }
 
 const PRIORITY_LABELS = {
-  low: 'Низкий',
-  medium: 'Средний',
-  high: 'Высокий',
-  critical: '🚨 Критично',
+  low: 'Low',
+  medium: 'Medium',
+  high: 'High',
+  critical: 'Critical',
 }
 
 const RPG_CATEGORY_ICONS: Record<string, string> = {
-  build: '🏗️',
+  build: '⚒️',
   research: '🔬',
   trade: '💰',
-  defense: '🛡️',
-  exploration: '🧭',
+  defense: '⚔️',
+  exploration: '🗺️',
 }
 
 const STATUS_LABELS = {
-  todo: 'В очереди',
-  in_progress: 'В работе',
-  done: 'Готово',
+  todo: 'Queued',
+  in_progress: 'Active',
+  done: 'Done',
 }
 
-interface TaskCardProps { task: Task }
+const panelStyle = {
+  background: 'rgba(13, 17, 23, 0.92)',
+  border: '1px solid #c9a84c',
+  boxShadow: '0 0 20px rgba(201, 168, 76, 0.15)',
+  borderRadius: 4,
+  backdropFilter: 'blur(12px)',
+} as const
 
-function TaskCard({ task }: TaskCardProps) {
+function TaskCard({ task }: { task: Task }) {
   const { completeTask } = useGameStore()
   const isDone = task.status === 'done'
 
   return (
     <div style={{
-      background: isDone ? 'rgba(16,185,129,0.05)' : 'rgba(255,255,255,0.03)',
-      border: `1px solid ${isDone ? '#10b98130' : 'rgba(255,255,255,0.07)'}`,
-      borderRadius: 8,
+      background: isDone ? 'rgba(45, 90, 39, 0.08)' : 'rgba(201, 168, 76, 0.03)',
+      border: `1px solid ${isDone ? 'rgba(45, 90, 39, 0.3)' : 'rgba(201, 168, 76, 0.15)'}`,
+      borderLeft: `3px solid ${PRIORITY_COLORS[task.priority]}`,
+      borderRadius: 4,
       padding: '10px 12px',
-      marginBottom: 8,
-      opacity: isDone ? 0.6 : 1,
+      marginBottom: 6,
+      opacity: isDone ? 0.5 : 1,
       transition: 'all 0.2s',
     }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
-        {/* Чекбокс */}
         <button
           onClick={() => !isDone && completeTask(task.id)}
           disabled={isDone}
           style={{
-            width: 18, height: 18, borderRadius: 4, flexShrink: 0, marginTop: 2,
-            background: isDone ? '#10b981' : 'transparent',
-            border: `2px solid ${isDone ? '#10b981' : '#6b7280'}`,
+            width: 18, height: 18, borderRadius: 2, flexShrink: 0, marginTop: 1,
+            background: isDone ? '#2d5a27' : 'transparent',
+            border: `2px solid ${isDone ? '#2d5a27' : '#c9a84c'}`,
             cursor: isDone ? 'default' : 'pointer',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            color: 'white', fontSize: 10,
+            color: '#e8dcc8', fontSize: 10,
           }}
         >
           {isDone ? '✓' : ''}
@@ -68,8 +74,7 @@ function TaskCard({ task }: TaskCardProps) {
             fontSize: 13, fontWeight: 600,
             color: isDone ? '#6b7280' : '#e8dcc8',
             textDecoration: isDone ? 'line-through' : 'none',
-            marginBottom: 4,
-            lineHeight: 1.3,
+            marginBottom: 4, lineHeight: 1.3,
           }}>
             {task.rpgCategory && (
               <span style={{ marginRight: 4 }}>{RPG_CATEGORY_ICONS[task.rpgCategory]}</span>
@@ -78,28 +83,35 @@ function TaskCard({ task }: TaskCardProps) {
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-            {/* Приоритет */}
             <span style={{
-              fontSize: 10, color: PRIORITY_COLORS[task.priority],
-              border: `1px solid ${PRIORITY_COLORS[task.priority]}40`,
-              borderRadius: 4, padding: '1px 5px',
+              fontSize: 9, color: PRIORITY_COLORS[task.priority],
+              border: `1px solid ${PRIORITY_COLORS[task.priority]}60`,
+              borderRadius: 2, padding: '1px 5px',
+              fontFamily: 'Cinzel, serif',
+              fontWeight: 600,
+              letterSpacing: 0.5,
+              textTransform: 'uppercase',
             }}>
               {PRIORITY_LABELS[task.priority]}
             </span>
 
-            {/* Статус */}
-            <span style={{ fontSize: 10, color: '#6b7280' }}>
+            <span style={{ fontSize: 10, color: '#8b8680' }}>
               {STATUS_LABELS[task.status]}
             </span>
 
-            {/* XP */}
-            <span style={{ fontSize: 10, color: '#7c3aed', marginLeft: 'auto' }}>
+            <span style={{
+              fontSize: 10,
+              color: '#c9a84c',
+              marginLeft: 'auto',
+              fontFamily: "'Courier New', monospace",
+              fontWeight: 700,
+            }}>
               +{task.xpReward} XP
             </span>
           </div>
 
           {task.dueDate && !isDone && (
-            <div style={{ fontSize: 10, color: '#f97316', marginTop: 3 }}>
+            <div style={{ fontSize: 10, color: '#d97706', marginTop: 3 }}>
               📅 {new Date(task.dueDate).toLocaleDateString('ru-RU')}
             </div>
           )}
@@ -119,39 +131,52 @@ export function TaskPanel() {
 
   return (
     <div style={{
+      ...panelStyle,
       position: 'absolute',
-      top: 60, right: 20, bottom: 80,
-      width: 320,
-      background: 'rgba(10,15,26,0.96)',
-      border: '1px solid rgba(244,197,66,0.2)',
-      borderRadius: 16,
+      top: 50, right: 16, bottom: 80,
+      width: 340,
       display: 'flex', flexDirection: 'column',
       zIndex: 20,
-      backdropFilter: 'blur(12px)',
       overflow: 'hidden',
     }}>
-      {/* Заголовок */}
+      {/* Header */}
       <div style={{
-        padding: '16px 18px 12px',
-        borderBottom: '1px solid rgba(255,255,255,0.07)',
+        padding: '14px 16px 10px',
+        borderBottom: '1px solid rgba(201, 168, 76, 0.2)',
         display: 'flex', alignItems: 'center',
+        background: 'rgba(201, 168, 76, 0.05)',
       }}>
-        <span style={{ fontSize: 16, fontWeight: 700, color: '#e8dcc8' }}>📋 Задачи</span>
+        <span style={{
+          fontFamily: 'Cinzel, serif',
+          fontSize: 14, fontWeight: 700, color: '#c9a84c',
+          letterSpacing: 1,
+        }}>
+          QUEST LOG
+        </span>
         <button
           onClick={() => setIsPanelOpen(false)}
           style={{
-            marginLeft: 'auto', background: 'none', border: 'none',
-            color: '#6b7280', cursor: 'pointer', fontSize: 18,
+            marginLeft: 'auto', background: 'none',
+            border: '1px solid rgba(201, 168, 76, 0.3)',
+            borderRadius: 2,
+            color: '#8b8680', cursor: 'pointer', fontSize: 14,
+            width: 24, height: 24,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
           }}
         >×</button>
       </div>
 
-      {/* Список */}
-      <div style={{ flex: 1, overflowY: 'auto', padding: '12px 14px' }}>
+      {/* Task list */}
+      <div style={{ flex: 1, overflowY: 'auto', padding: '10px 12px' }}>
         {activeTasks.length > 0 && (
           <>
-            <div style={{ fontSize: 11, color: '#6b7280', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 }}>
-              Активные ({activeTasks.length})
+            <div style={{
+              fontFamily: 'Cinzel, serif',
+              fontSize: 10, color: '#c9a84c',
+              textTransform: 'uppercase',
+              letterSpacing: 2, marginBottom: 8,
+            }}>
+              Active ({activeTasks.length})
             </div>
             {activeTasks.map(task => <TaskCard key={task.id} task={task} />)}
           </>
@@ -159,22 +184,27 @@ export function TaskPanel() {
 
         {doneTasks.length > 0 && (
           <>
-            <div style={{ fontSize: 11, color: '#6b7280', textTransform: 'uppercase', letterSpacing: 1, marginTop: 12, marginBottom: 8 }}>
-              Выполнено ({doneTasks.length})
+            <div style={{
+              fontFamily: 'Cinzel, serif',
+              fontSize: 10, color: '#8b8680',
+              textTransform: 'uppercase',
+              letterSpacing: 2, marginTop: 14, marginBottom: 8,
+            }}>
+              Completed ({doneTasks.length})
             </div>
             {doneTasks.map(task => <TaskCard key={task.id} task={task} />)}
           </>
         )}
       </div>
 
-      {/* Футер */}
+      {/* Footer */}
       <div style={{
-        padding: '10px 14px',
-        borderTop: '1px solid rgba(255,255,255,0.07)',
-        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+        padding: '8px 12px',
+        borderTop: '1px solid rgba(201, 168, 76, 0.2)',
+        background: 'rgba(201, 168, 76, 0.03)',
       }}>
-        <span style={{ fontSize: 11, color: '#6b7280' }}>
-          Нажми на задачу чтобы завершить → получишь XP
+        <span style={{ fontSize: 10, color: '#8b8680', fontStyle: 'italic' }}>
+          Complete quests to earn XP and grow your kingdom
         </span>
       </div>
     </div>
