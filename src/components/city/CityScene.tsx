@@ -8,6 +8,7 @@ import * as THREE from 'three'
 import { Building } from './Building'
 import { Ground } from './Ground'
 import { AgentCharacter } from './AgentCharacter'
+import { WASDControls } from './WASDControls'
 import { useGameStore } from '@/store/gameStore'
 import { BUILDING_TEMPLATES } from '@/data/buildings'
 
@@ -154,6 +155,7 @@ export default function CityScene() {
 
         {/* Camera controls */}
         <OrbitControls
+          makeDefault
           enablePan
           enableZoom
           enableRotate
@@ -162,6 +164,7 @@ export default function CityScene() {
           maxPolarAngle={Math.PI / 2.2}
           target={[0, 0, 0]}
         />
+        <WASDControls />
       </Suspense>
     </Canvas>
   )
