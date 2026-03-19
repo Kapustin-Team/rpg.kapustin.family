@@ -24,8 +24,16 @@ export interface Building {
   type: string
   level: number
   position: [number, number, number]
+  rotation: number
   status: 'planned' | 'under_construction' | 'active'
   constructionProgress: number
+}
+
+export interface EnvironmentObject {
+  id: string
+  type: 'tree' | 'bench' | 'streetlight' | 'ev_charger' | 'bush' | 'planter' | 'car'
+  position: [number, number, number]
+  rotation: number
 }
 
 export interface Task {
@@ -34,7 +42,7 @@ export interface Task {
   status: 'todo' | 'in_progress' | 'done'
   priority: 'low' | 'medium' | 'high' | 'critical'
   xpReward: number
-  rpgCategory?: 'build' | 'research' | 'trade' | 'defense' | 'exploration'
+  rpgCategory?: 'build' | 'research' | 'trade' | 'defense' | 'exploration' | 'frontend' | 'backend' | 'devops' | 'content' | 'health'
   dueDate?: string
   assignedTo?: string
   resourceReward?: {
@@ -81,11 +89,33 @@ const DEFAULT_RESOURCES: Resource[] = [
 ]
 
 const DEFAULT_BUILDINGS: Building[] = [
-  { id: 'hq',      name: 'Штаб',                type: 'hq',      level: 1, position: [0, 0, 0],    status: 'active',              constructionProgress: 100 },
-  { id: 'farm1',   name: 'Ферма',               type: 'farm',    level: 1, position: [-4, 0, 2],   status: 'active',              constructionProgress: 100 },
-  { id: 'lib1',    name: 'Библиотека',          type: 'library', level: 1, position: [4, 0, -2],   status: 'active',              constructionProgress: 100 },
-  { id: 'lab1',    name: 'Лаборатория данных',  type: 'lab',     level: 1, position: [3, 0, 3],    status: 'under_construction',  constructionProgress: 45 },
-  { id: 'server1', name: 'Сервер',              type: 'server',  level: 1, position: [-3, 0, -3],  status: 'planned',             constructionProgress: 0 },
+  { id: 'hq',      name: 'HQ Command Center',     type: 'hq',      level: 1, position: [0, 0, 0],    rotation: 0, status: 'active',              constructionProgress: 100 },
+  { id: 'farm1',   name: 'Vertical Farm',          type: 'farm',    level: 1, position: [-5, 0, 3],   rotation: 0, status: 'active',              constructionProgress: 100 },
+  { id: 'lib1',    name: 'Digital Knowledge Hub',   type: 'library', level: 1, position: [5, 0, -3],   rotation: 0, status: 'active',              constructionProgress: 100 },
+  { id: 'lab1',    name: 'AI Research Center',      type: 'lab',     level: 1, position: [4, 0, 4],    rotation: 0, status: 'under_construction',  constructionProgress: 45 },
+  { id: 'server1', name: 'Data Center',             type: 'server',  level: 1, position: [-4, 0, -4],  rotation: 0, status: 'planned',             constructionProgress: 0 },
+]
+
+const DEFAULT_ENVIRONMENT: EnvironmentObject[] = [
+  { id: 'tree1', type: 'tree', position: [8, 0, 8], rotation: 0 },
+  { id: 'tree2', type: 'tree', position: [-8, 0, 6], rotation: 0.5 },
+  { id: 'tree3', type: 'tree', position: [7, 0, -7], rotation: 1.2 },
+  { id: 'tree4', type: 'tree', position: [-6, 0, -8], rotation: 2.1 },
+  { id: 'tree5', type: 'tree', position: [10, 0, 0], rotation: 0.8 },
+  { id: 'bench1', type: 'bench', position: [2, 0, -2], rotation: 0 },
+  { id: 'bench2', type: 'bench', position: [-2, 0, 2], rotation: Math.PI / 2 },
+  { id: 'light1', type: 'streetlight', position: [3, 0, 0], rotation: 0 },
+  { id: 'light2', type: 'streetlight', position: [-3, 0, 0], rotation: 0 },
+  { id: 'light3', type: 'streetlight', position: [0, 0, 3], rotation: 0 },
+  { id: 'light4', type: 'streetlight', position: [0, 0, -3], rotation: 0 },
+  { id: 'ev1', type: 'ev_charger', position: [6, 0, 0], rotation: 0 },
+  { id: 'bush1', type: 'bush', position: [1, 0, 5], rotation: 0 },
+  { id: 'bush2', type: 'bush', position: [-1, 0, 5], rotation: 0 },
+  { id: 'bush3', type: 'bush', position: [3, 0, 6], rotation: 0 },
+  { id: 'planter1', type: 'planter', position: [2, 0, 1], rotation: 0 },
+  { id: 'planter2', type: 'planter', position: [-2, 0, -1], rotation: 0 },
+  { id: 'car1', type: 'car', position: [8, 0, -3], rotation: 0 },
+  { id: 'car2', type: 'car', position: [8.5, 0, -1.5], rotation: 0 },
 ]
 
 const DEFAULT_CHARACTER: Character = {
@@ -101,6 +131,7 @@ function mapStrapiBuilding(b: StrapiRpgBuilding): Building {
     type: b.buildingType,
     level: b.level,
     position: [b.positionX ?? 0, b.positionY ?? 0, b.positionZ ?? 0],
+    rotation: 0,
     status: b.status as Building['status'],
     constructionProgress: b.constructionProgress,
   }
@@ -145,6 +176,7 @@ interface GameStore {
   character: Character
   resources: Resource[]
   buildings: Building[]
+  environmentObjects: EnvironmentObject[]
   tasks: Task[]
   agents: Agent[]
   isLoaded: boolean
@@ -152,6 +184,8 @@ interface GameStore {
   selectedAgentId: string | null
   buildingPlacementType: string | null
   isPanelOpen: boolean
+  editMode: boolean
+
   setSelectedBuilding: (id: string | null) => void
   setIsPanelOpen: (open: boolean) => void
   setSelectedAgent: (id: string | null) => void
@@ -161,12 +195,22 @@ interface GameStore {
   completeTask: (taskId: string) => void
   tickResources: () => void
   loadFromStrapi: () => Promise<void>
+  setEditMode: (on: boolean) => void
+  updateBuildingPosition: (id: string, position: [number, number, number]) => void
+  updateBuildingRotation: (id: string, rotation: number) => void
+  deleteBuilding: (id: string) => void
+  updateEnvironmentPosition: (id: string, position: [number, number, number]) => void
+  updateEnvironmentRotation: (id: string, rotation: number) => void
+  deleteEnvironment: (id: string) => void
+  moveAgentTo: (agentId: string, position: [number, number, number]) => void
+  moveAgentToBuilding: (agentId: string, buildingId: string) => void
 }
 
 export const useGameStore = create<GameStore>((set, get) => ({
   character: DEFAULT_CHARACTER,
   resources: DEFAULT_RESOURCES,
   buildings: DEFAULT_BUILDINGS,
+  environmentObjects: DEFAULT_ENVIRONMENT,
   tasks: [],
   agents: AGENTS.map(a => ({ ...a })),
   isLoaded: false,
@@ -174,12 +218,56 @@ export const useGameStore = create<GameStore>((set, get) => ({
   selectedAgentId: null,
   buildingPlacementType: null,
   isPanelOpen: false,
+  editMode: false,
 
   setSelectedBuilding: (id) => set({ selectedBuildingId: id }),
   setIsPanelOpen: (open) => set({ isPanelOpen: open }),
   setSelectedAgent: (id) => set({ selectedAgentId: id }),
+  setEditMode: (on) => set({ editMode: on }),
 
   setBuildingPlacementType: (type) => set({ buildingPlacementType: type }),
+
+  updateBuildingPosition: (id, position) => set((state) => ({
+    buildings: state.buildings.map(b => b.id === id ? { ...b, position } : b),
+  })),
+
+  updateBuildingRotation: (id, rotation) => set((state) => ({
+    buildings: state.buildings.map(b => b.id === id ? { ...b, rotation } : b),
+  })),
+
+  deleteBuilding: (id) => set((state) => ({
+    buildings: state.buildings.filter(b => b.id !== id),
+  })),
+
+  updateEnvironmentPosition: (id, position) => set((state) => ({
+    environmentObjects: state.environmentObjects.map(o => o.id === id ? { ...o, position } : o),
+  })),
+
+  updateEnvironmentRotation: (id, rotation) => set((state) => ({
+    environmentObjects: state.environmentObjects.map(o => o.id === id ? { ...o, rotation } : o),
+  })),
+
+  deleteEnvironment: (id) => set((state) => ({
+    environmentObjects: state.environmentObjects.filter(o => o.id !== id),
+  })),
+
+  moveAgentTo: (agentId, position) => set((state) => ({
+    agents: state.agents.map(a =>
+      a.id === agentId ? { ...a, status: 'moving' as const, targetPosition: position as [number, number, number] } : a
+    ),
+  })),
+
+  moveAgentToBuilding: (agentId, buildingId) => {
+    const state = get()
+    const building = state.buildings.find(b => b.id === buildingId)
+    if (!building) return
+    const pos: [number, number, number] = [building.position[0] + 1, 0, building.position[2] + 1]
+    set({
+      agents: state.agents.map(a =>
+        a.id === agentId ? { ...a, status: 'moving' as const, targetPosition: pos } : a
+      ),
+    })
+  },
 
   assignTaskToAgent: (agentId, taskId) => set((state) => ({
     tasks: state.tasks.map(t =>
@@ -210,6 +298,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       type: template.type,
       level: 1,
       position,
+      rotation: 0,
       status: 'active',
       constructionProgress: 100,
     }
@@ -227,7 +316,6 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
   loadFromStrapi: async () => {
     try {
-      // Try Next.js API proxy first for tasks
       let proxyTasks: Task[] = []
       try {
         const proxyRes = await fetch('/api/tasks')
@@ -246,7 +334,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
           }
         }
       } catch {
-        // proxy unavailable, fall through to direct Strapi
+        // proxy unavailable
       }
 
       const [tasks, buildings, resources, characters] = await Promise.allSettled([

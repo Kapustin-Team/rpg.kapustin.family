@@ -1,104 +1,274 @@
-"use client"
-import { useRef, useState, useEffect, useMemo } from "react"
-import { useFrame } from "@react-three/fiber"
-import { Text, Billboard } from "@react-three/drei"
-import { useGameStore } from "@/store/gameStore"
-import type { Agent } from "@/data/agents"
-import * as THREE from "three"
+'use client'
+import { useRef, useState, useMemo } from 'react'
+import { useFrame } from '@react-three/fiber'
+import { Text, Billboard } from '@react-three/drei'
+import * as THREE from 'three'
+import { useGameStore } from '@/store/gameStore'
+import type { Agent } from '@/data/agents'
 
-interface Props { agent: Agent }
+/* =============================================
+   Agent-specific clothing configs
+   ============================================= */
+const AGENT_STYLE: Record<string, {
+  bodyColor: string
+  topColor: string
+  bottomColor: string
+  shoeColor: string
+  hairColor: string
+  hairStyle: 'bun' | 'short' | 'long' | 'longFlowing' | 'ponytail'
+  accessories: string[]
+  skinColor?: string
+}> = {
+  milena: {
+    bodyColor: '#1e3a5f', topColor: '#1e3a5f', bottomColor: '#1e3a5f',
+    shoeColor: '#111', hairColor: '#2c1810', hairStyle: 'bun',
+    accessories: ['glasses', 'briefcase', 'earrings'],
+  },
+  aleksandra: {
+    bodyColor: '#6b21a8', topColor: '#4c1d95', bottomColor: '#1f2937',
+    shoeColor: '#1a1a1a', hairColor: '#e5e5e5', hairStyle: 'short',
+    accessories: ['nosering', 'laptop', 'headphones'],
+  },
+  kristina: {
+    bodyColor: '#db2777', topColor: '#ec4899', bottomColor: '#ec4899',
+    shoeColor: '#f9a8d4', hairColor: '#92400e', hairStyle: 'longFlowing',
+    accessories: ['camera', 'phone', 'bag'],
+  },
+  danijela: {
+    bodyColor: '#15803d', topColor: '#166534', bottomColor: '#78350f',
+    shoeColor: '#451a03', hairColor: '#44403c', hairStyle: 'long',
+    accessories: ['glasses', 'books', 'messengerbag'],
+  },
+  jovana: {
+    bodyColor: '#7c3aed', topColor: '#6d28d9', bottomColor: '#4c1d95',
+    shoeColor: '#ddd', hairColor: '#1c1917', hairStyle: 'ponytail',
+    accessories: ['fitnesstracker', 'waterbottle'],
+    skinColor: '#d4a76a',
+  },
+}
 
-// Unique accessories per agent
-function AgentAccessory({ agentId, color }: { agentId: string; color: string }) {
-  switch (agentId) {
-    case 'milena':
-      // Crown / tiara
+/* =============================================
+   Individual accessory components
+   ============================================= */
+function Glasses({ round }: { round?: boolean }) {
+  return (
+    <group position={[0, 0.02, 0.12]}>
+      {/* Bridge */}
+      <mesh>
+        <boxGeometry args={[0.04, 0.005, 0.005]} />
+        <meshStandardMaterial color="#b0b0b0" metalness={0.8} roughness={0.2} />
+      </mesh>
+      {/* Lenses */}
+      {[-0.035, 0.035].map((x, i) => (
+        <mesh key={i} position={[x, 0, 0]}>
+          {round ? <sphereGeometry args={[0.02, 8, 8]} /> : <boxGeometry args={[0.035, 0.02, 0.005]} />}
+          <meshStandardMaterial color="#a0d0ff" metalness={0.8} roughness={0.1} transparent opacity={0.4} />
+        </mesh>
+      ))}
+      {/* Arms */}
+      {[-0.055, 0.055].map((x, i) => (
+        <mesh key={i} position={[x, 0, -0.04]}>
+          <boxGeometry args={[0.003, 0.003, 0.08]} />
+          <meshStandardMaterial color="#b0b0b0" metalness={0.8} roughness={0.2} />
+        </mesh>
+      ))}
+    </group>
+  )
+}
+
+function Earrings() {
+  return (
+    <>
+      {[-0.07, 0.07].map((x, i) => (
+        <mesh key={i} position={[x, -0.02, 0]}>
+          <sphereGeometry args={[0.012, 6, 6]} />
+          <meshStandardMaterial color="#fbbf24" metalness={0.9} roughness={0.1} emissive="#fbbf24" emissiveIntensity={0.3} />
+        </mesh>
+      ))}
+    </>
+  )
+}
+
+function NoseRing() {
+  return (
+    <mesh position={[0.015, -0.01, 0.13]}>
+      <torusGeometry args={[0.008, 0.002, 6, 8]} />
+      <meshStandardMaterial color="#c0c0c0" metalness={0.9} roughness={0.1} />
+    </mesh>
+  )
+}
+
+function Briefcase({ position }: { position: [number, number, number] }) {
+  return (
+    <group position={position}>
+      <mesh>
+        <boxGeometry args={[0.08, 0.06, 0.025]} />
+        <meshStandardMaterial color="#78350f" roughness={0.6} />
+      </mesh>
+      <mesh position={[0, 0.035, 0]}>
+        <torusGeometry args={[0.015, 0.003, 4, 8]} />
+        <meshStandardMaterial color="#b0b0b0" metalness={0.8} roughness={0.2} />
+      </mesh>
+    </group>
+  )
+}
+
+function Laptop({ position }: { position: [number, number, number] }) {
+  return (
+    <group position={position} rotation={[0.2, 0, 0]}>
+      <mesh>
+        <boxGeometry args={[0.08, 0.002, 0.06]} />
+        <meshStandardMaterial color="#374151" metalness={0.5} roughness={0.3} />
+      </mesh>
+      <mesh position={[0, 0.002, -0.03]} rotation={[-0.3, 0, 0]}>
+        <boxGeometry args={[0.07, 0.05, 0.002]} />
+        <meshStandardMaterial color="#1e293b" emissive="#334155" emissiveIntensity={0.3} />
+      </mesh>
+    </group>
+  )
+}
+
+function Headphones({ position }: { position: [number, number, number] }) {
+  return (
+    <group position={position}>
+      <mesh rotation={[0, 0, Math.PI / 2]}>
+        <torusGeometry args={[0.04, 0.006, 6, 12, Math.PI]} />
+        <meshStandardMaterial color="#1f2937" roughness={0.5} />
+      </mesh>
+      {[-0.04, 0.04].map((x, i) => (
+        <mesh key={i} position={[x, 0, 0]}>
+          <cylinderGeometry args={[0.015, 0.015, 0.02, 8]} />
+          <meshStandardMaterial color="#111" roughness={0.5} />
+        </mesh>
+      ))}
+    </group>
+  )
+}
+
+function Camera({ position }: { position: [number, number, number] }) {
+  return (
+    <group position={position}>
+      <mesh>
+        <boxGeometry args={[0.05, 0.035, 0.03]} />
+        <meshStandardMaterial color="#1f2937" roughness={0.4} metalness={0.3} />
+      </mesh>
+      <mesh position={[0, 0, 0.02]}>
+        <cylinderGeometry args={[0.01, 0.012, 0.02, 8]} />
+        <meshStandardMaterial color="#111" metalness={0.5} roughness={0.3} />
+      </mesh>
+    </group>
+  )
+}
+
+function Phone({ position }: { position: [number, number, number] }) {
+  return (
+    <mesh position={position}>
+      <boxGeometry args={[0.025, 0.05, 0.005]} />
+      <meshStandardMaterial color="#1f2937" emissive="#334155" emissiveIntensity={0.3} />
+    </mesh>
+  )
+}
+
+function Books({ position }: { position: [number, number, number] }) {
+  return (
+    <group position={position}>
+      {[0, 0.015, 0.03].map((y, i) => (
+        <mesh key={i} position={[0, y, 0]}>
+          <boxGeometry args={[0.06, 0.012, 0.04]} />
+          <meshStandardMaterial color={['#7c3aed', '#ef4444', '#0ea5e9'][i]} roughness={0.7} />
+        </mesh>
+      ))}
+    </group>
+  )
+}
+
+function FitnessTracker({ position }: { position: [number, number, number] }) {
+  return (
+    <group position={position}>
+      <mesh rotation={[0, 0, Math.PI / 2]}>
+        <torusGeometry args={[0.02, 0.004, 6, 12]} />
+        <meshStandardMaterial color="#0ea5e9" emissive="#0ea5e9" emissiveIntensity={1} />
+      </mesh>
+    </group>
+  )
+}
+
+function WaterBottle({ position }: { position: [number, number, number] }) {
+  return (
+    <group position={position}>
+      <mesh>
+        <cylinderGeometry args={[0.012, 0.012, 0.06, 6]} />
+        <meshStandardMaterial color="#60a5fa" metalness={0.5} roughness={0.3} transparent opacity={0.7} />
+      </mesh>
+      <mesh position={[0, 0.035, 0]}>
+        <cylinderGeometry args={[0.008, 0.012, 0.01, 6]} />
+        <meshStandardMaterial color="#94a3b8" metalness={0.5} roughness={0.3} />
+      </mesh>
+    </group>
+  )
+}
+
+/* =============================================
+   Hair styles
+   ============================================= */
+function Hair({ style, color }: { style: string; color: string }) {
+  switch (style) {
+    case 'bun':
       return (
-        <group position={[0, 1.02, 0]}>
-          <mesh>
-            <cylinderGeometry args={[0.13, 0.12, 0.04, 8]} />
-            <meshStandardMaterial color="#c9a84c" metalness={0.8} roughness={0.2} />
+        <group>
+          <mesh position={[0, 0.06, -0.02]}>
+            <sphereGeometry args={[0.065, 8, 8]} />
+            <meshStandardMaterial color={color} roughness={0.8} />
           </mesh>
-          {/* Crown points */}
-          {Array.from({ length: 5 }).map((_, i) => {
-            const angle = (i / 5) * Math.PI * 2
-            return (
-              <mesh key={i} position={[Math.cos(angle) * 0.12, 0.05, Math.sin(angle) * 0.12]}>
-                <coneGeometry args={[0.02, 0.06, 4]} />
-                <meshStandardMaterial color="#c9a84c" metalness={0.8} roughness={0.2} />
-              </mesh>
-            )
-          })}
-          {/* Gem */}
-          <mesh position={[0, 0.04, 0.12]}>
-            <octahedronGeometry args={[0.02, 0]} />
-            <meshStandardMaterial color="#ff4444" emissive="#ff4444" emissiveIntensity={0.8} />
+          <mesh position={[0, 0.12, -0.01]}>
+            <sphereGeometry args={[0.035, 8, 8]} />
+            <meshStandardMaterial color={color} roughness={0.8} />
           </mesh>
         </group>
       )
-    case 'aleksandra':
-      // Hammer (developer's tool)
+    case 'short':
       return (
-        <group position={[-0.22, 0.4, 0.05]} rotation={[0, 0, -0.3]}>
-          {/* Handle */}
-          <mesh position={[0, -0.1, 0]}>
-            <cylinderGeometry args={[0.015, 0.018, 0.25, 4]} />
-            <meshStandardMaterial color="#5c3d1e" roughness={0.8} />
+        <mesh position={[0, 0.04, 0]}>
+          <boxGeometry args={[0.12, 0.06, 0.13]} />
+          <meshStandardMaterial color={color} roughness={0.8} />
+        </mesh>
+      )
+    case 'long':
+      return (
+        <group>
+          <mesh position={[0, 0.04, -0.02]}>
+            <sphereGeometry args={[0.065, 8, 8]} />
+            <meshStandardMaterial color={color} roughness={0.8} />
           </mesh>
-          {/* Head */}
-          <mesh position={[0, 0.03, 0]}>
-            <boxGeometry args={[0.08, 0.04, 0.04]} />
-            <meshStandardMaterial color="#8a8a8a" metalness={0.7} roughness={0.3} />
+          <mesh position={[0, -0.05, -0.05]}>
+            <boxGeometry args={[0.1, 0.12, 0.04]} />
+            <meshStandardMaterial color={color} roughness={0.8} />
           </mesh>
         </group>
       )
-    case 'kristina':
-      // Candy cane / lollipop
+    case 'longFlowing':
       return (
-        <group position={[0.22, 0.5, 0.05]}>
-          {/* Stick */}
-          <mesh position={[0, -0.08, 0]}>
-            <cylinderGeometry args={[0.008, 0.008, 0.15, 4]} />
-            <meshStandardMaterial color="#ffffff" />
+        <group>
+          <mesh position={[0, 0.04, 0]}>
+            <sphereGeometry args={[0.065, 8, 8]} />
+            <meshStandardMaterial color={color} roughness={0.8} />
           </mesh>
-          {/* Candy swirl */}
-          <mesh position={[0, 0.02, 0]}>
-            <sphereGeometry args={[0.035, 8, 6]} />
-            <meshStandardMaterial color="#ff66aa" emissive="#ff44aa" emissiveIntensity={0.3} />
-          </mesh>
-          <mesh position={[0, 0.02, 0]}>
-            <sphereGeometry args={[0.038, 8, 6, 0, Math.PI]} />
-            <meshStandardMaterial color="#ffffff" transparent opacity={0.5} />
+          <mesh position={[0, -0.05, -0.04]}>
+            <coneGeometry args={[0.06, 0.15, 8]} />
+            <meshStandardMaterial color={color} roughness={0.8} />
           </mesh>
         </group>
       )
-    case 'danijela':
-      // Book / tome
+    case 'ponytail':
       return (
-        <group position={[-0.2, 0.45, 0.08]}>
-          <mesh rotation={[0, 0.3, 0.1]}>
-            <boxGeometry args={[0.1, 0.12, 0.03]} />
-            <meshStandardMaterial color="#4a2020" roughness={0.7} />
+        <group>
+          <mesh position={[0, 0.04, -0.02]}>
+            <sphereGeometry args={[0.06, 8, 8]} />
+            <meshStandardMaterial color={color} roughness={0.8} />
           </mesh>
-          {/* Pages */}
-          <mesh position={[0, 0, 0.005]} rotation={[0, 0.3, 0.1]}>
-            <boxGeometry args={[0.08, 0.1, 0.02]} />
-            <meshStandardMaterial color="#f0e8d0" />
-          </mesh>
-        </group>
-      )
-    case 'jovana':
-      // Wristband / fitness tracker
-      return (
-        <group position={[0.17, 0.42, 0]}>
-          <mesh>
-            <cylinderGeometry args={[0.05, 0.05, 0.025, 8]} />
-            <meshStandardMaterial color="#2a2a2a" metalness={0.4} roughness={0.3} />
-          </mesh>
-          {/* Screen */}
-          <mesh position={[0, 0, 0.04]} rotation={[0, 0, 0]}>
-            <boxGeometry args={[0.03, 0.015, 0.008]} />
-            <meshStandardMaterial color="#00ff88" emissive="#00ff88" emissiveIntensity={1.5} />
+          <mesh position={[0, 0.02, -0.08]} rotation={[0.5, 0, 0]}>
+            <cylinderGeometry args={[0.015, 0.02, 0.1, 6]} />
+            <meshStandardMaterial color={color} roughness={0.8} />
           </mesh>
         </group>
       )
@@ -107,354 +277,355 @@ function AgentAccessory({ agentId, color }: { agentId: string; color: string }) 
   }
 }
 
-// Footstep dust particle system
-function FootstepDust({ position, active }: { position: THREE.Vector3; active: boolean }) {
-  const particles = useRef<THREE.Group>(null)
-  const particleData = useMemo(() =>
-    Array.from({ length: 4 }).map((_, i) => ({
-      offset: [Math.sin(i * 1.7) * 0.08, 0, Math.cos(i * 2.3) * 0.08] as [number, number, number],
-      speed: 0.3 + Math.sin(i * 3.1) * 0.15,
-      phase: i * 0.4,
-    }))
-  , [])
-
-  useFrame((state) => {
-    if (!particles.current || !active) return
-    const t = state.clock.elapsedTime
-    particles.current.children.forEach((child, i) => {
-      const data = particleData[i]
-      const life = (t * data.speed + data.phase) % 1.0
-      child.position.y = life * 0.15
-      child.scale.setScalar(0.5 + life * 0.5)
-      const mat = (child as THREE.Mesh).material as THREE.MeshStandardMaterial
-      mat.opacity = Math.max(0, 0.3 - life * 0.4)
-    })
-  })
-
-  if (!active) return null
-
-  return (
-    <group ref={particles} position={[position.x, 0.02, position.z]}>
-      {particleData.map((d, i) => (
-        <mesh key={i} position={d.offset}>
-          <sphereGeometry args={[0.03, 4, 4]} />
-          <meshStandardMaterial color="#a08860" transparent opacity={0.2} />
-        </mesh>
-      ))}
-    </group>
-  )
-}
-
-export function AgentCharacter({ agent }: Props) {
-  const groupRef = useRef<THREE.Group>(null)
-  const bodyGroupRef = useRef<THREE.Group>(null)
-  const torsoRef = useRef<THREE.Mesh>(null)
-  const headRef = useRef<THREE.Mesh>(null)
+/* =============================================
+   Humanoid Body
+   ============================================= */
+function HumanoidBody({ agentId, animState }: { agentId: string; animState: 'idle' | 'walking' | 'working' }) {
+  const style = AGENT_STYLE[agentId] || AGENT_STYLE.milena
+  const bodyRef = useRef<THREE.Group>(null)
   const leftArmRef = useRef<THREE.Group>(null)
   const rightArmRef = useRef<THREE.Group>(null)
   const leftLegRef = useRef<THREE.Group>(null)
   const rightLegRef = useRef<THREE.Group>(null)
+  const torsoRef = useRef<THREE.Mesh>(null)
+  const headRef = useRef<THREE.Group>(null)
+  const skinColor = style.skinColor || '#deb896'
 
-  const [wanderTarget, setWanderTarget] = useState<[number, number]>([agent.position[0], agent.position[2]])
-  const [isMoving, setIsMoving] = useState(false)
-  const selectedAgentId = useGameStore((s) => s.selectedAgentId)
-  const setSelectedAgent = useGameStore((s) => s.setSelectedAgent)
-  const isSelected = selectedAgentId === agent.id
+  useFrame((state) => {
+    const t = state.clock.elapsedTime
 
-  const posRef = useRef(new THREE.Vector3(...agent.position))
-
-  // Darker shade of agent color for cloak
-  const cloakColor = agent.color.replace(/[0-9a-f]{2}/gi, (hex: string) =>
-    Math.max(0, parseInt(hex, 16) - 40).toString(16).padStart(2, '0')
-  )
-
-  useEffect(() => {
-    if (agent.status !== "idle") return
-    const tick = () => {
-      setWanderTarget([(Math.random() - 0.5) * 10, (Math.random() - 0.5) * 10])
-    }
-    tick()
-    const id = setInterval(tick, 3000 + Math.random() * 4000)
-    return () => clearInterval(id)
-  }, [agent.status])
-
-  useFrame((state, delta) => {
-    if (!groupRef.current) return
-    const t = state.clock.getElapsedTime()
-
-    if (agent.status === "working") {
-      if (bodyGroupRef.current) {
-        bodyGroupRef.current.rotation.x = 0.3
-        bodyGroupRef.current.position.y = 0.1 + Math.sin(t * 3) * 0.03
+    if (animState === 'idle') {
+      // Breathing
+      if (torsoRef.current) {
+        torsoRef.current.scale.y = 1 + Math.sin(t * 2) * 0.01
       }
-      if (rightArmRef.current) rightArmRef.current.rotation.x = -0.8 + Math.sin(t * 6) * 0.4
-      if (leftArmRef.current) leftArmRef.current.rotation.x = 0.3
-      if (rightLegRef.current) rightLegRef.current.rotation.x = 0
-      if (leftLegRef.current) leftLegRef.current.rotation.x = 0
-      setIsMoving(false)
-    } else if (agent.status === "idle") {
-      const dx = wanderTarget[0] - groupRef.current.position.x
-      const dz = wanderTarget[1] - groupRef.current.position.z
-      const dist = Math.sqrt(dx * dx + dz * dz)
-
-      if (dist > 0.15) {
-        groupRef.current.position.x += (dx / dist) * delta * 0.8
-        groupRef.current.position.z += (dz / dist) * delta * 0.8
-        groupRef.current.rotation.y = Math.atan2(dx, dz)
-        setIsMoving(true)
-        posRef.current.copy(groupRef.current.position)
-
-        const walkSpeed = 4
-        if (leftArmRef.current) leftArmRef.current.rotation.x = Math.sin(t * walkSpeed) * 0.6
-        if (rightArmRef.current) rightArmRef.current.rotation.x = -Math.sin(t * walkSpeed) * 0.6
-        if (leftLegRef.current) leftLegRef.current.rotation.x = -Math.sin(t * walkSpeed) * 0.5
-        if (rightLegRef.current) rightLegRef.current.rotation.x = Math.sin(t * walkSpeed) * 0.5
-        if (bodyGroupRef.current) {
-          bodyGroupRef.current.position.y = Math.abs(Math.sin(t * walkSpeed * 2)) * 0.04
-          bodyGroupRef.current.rotation.x = 0.05 // slight lean forward while walking
-          bodyGroupRef.current.rotation.z = Math.sin(t * walkSpeed) * 0.03 // body sway
-        }
-      } else {
-        setIsMoving(false)
-        if (torsoRef.current) torsoRef.current.scale.y = 1 + Math.sin(t * 1.2) * 0.02
-        if (headRef.current) headRef.current.rotation.z = Math.sin(t * 0.8) * 0.05
-        if (leftArmRef.current) leftArmRef.current.rotation.x = Math.sin(t * 0.9) * 0.1
-        if (rightArmRef.current) rightArmRef.current.rotation.x = -Math.sin(t * 1.1) * 0.1
-        if (leftLegRef.current) leftLegRef.current.rotation.x = 0
-        if (rightLegRef.current) rightLegRef.current.rotation.x = 0
-        if (bodyGroupRef.current) {
-          bodyGroupRef.current.position.y = 0
-          bodyGroupRef.current.rotation.x = 0
-          bodyGroupRef.current.rotation.z = 0
-        }
+      // Weight shifting
+      if (bodyRef.current) {
+        bodyRef.current.rotation.z = Math.sin(t * 0.5) * 0.02
       }
+    } else if (animState === 'walking') {
+      // Leg alternation
+      if (leftLegRef.current) leftLegRef.current.rotation.x = Math.sin(t * 8) * 0.4
+      if (rightLegRef.current) rightLegRef.current.rotation.x = Math.sin(t * 8 + Math.PI) * 0.4
+      // Arm swing
+      if (leftArmRef.current) leftArmRef.current.rotation.x = Math.sin(t * 8 + Math.PI) * 0.3
+      if (rightArmRef.current) rightArmRef.current.rotation.x = Math.sin(t * 8) * 0.3
+      // Head bob
+      if (headRef.current) headRef.current.position.y = 0.52 + Math.abs(Math.sin(t * 8)) * 0.01
+    } else if (animState === 'working') {
+      // Typing animation — hands moving
+      if (leftArmRef.current) leftArmRef.current.rotation.x = -0.5 + Math.sin(t * 6) * 0.08
+      if (rightArmRef.current) rightArmRef.current.rotation.x = -0.5 + Math.sin(t * 6 + 1) * 0.08
+      // Head tilted down
+      if (headRef.current) headRef.current.rotation.x = -0.15
     }
   })
 
-  const statusBubble = agent.status === "working" ? "⚙️" : agent.status === "done" ? "✅" : "💬"
+  const accessories = style.accessories || []
+
+  return (
+    <group ref={bodyRef} scale={[4, 4, 4]}>
+      {/* Head */}
+      <group ref={headRef} position={[0, 0.52, 0]}>
+        <mesh>
+          <sphereGeometry args={[0.06, 10, 10]} />
+          <meshStandardMaterial color={skinColor} roughness={0.7} />
+        </mesh>
+        {/* Eyes */}
+        <mesh position={[-0.02, 0.015, 0.055]}>
+          <sphereGeometry args={[0.008, 6, 6]} />
+          <meshStandardMaterial color="#1a1a2e" />
+        </mesh>
+        <mesh position={[0.02, 0.015, 0.055]}>
+          <sphereGeometry args={[0.008, 6, 6]} />
+          <meshStandardMaterial color="#1a1a2e" />
+        </mesh>
+        {/* Nose */}
+        <mesh position={[0, -0.005, 0.06]} rotation={[Math.PI / 2, 0, 0]}>
+          <coneGeometry args={[0.006, 0.015, 4]} />
+          <meshStandardMaterial color={skinColor} roughness={0.7} />
+        </mesh>
+        {/* Mouth */}
+        <mesh position={[0, -0.02, 0.055]}>
+          <boxGeometry args={[0.02, 0.003, 0.003]} />
+          <meshStandardMaterial color="#b47070" />
+        </mesh>
+        {/* Hair */}
+        <Hair style={style.hairStyle} color={style.hairColor} />
+        {/* Face accessories */}
+        {accessories.includes('glasses') && <Glasses round={agentId === 'danijela'} />}
+        {accessories.includes('earrings') && <Earrings />}
+        {accessories.includes('nosering') && <NoseRing />}
+      </group>
+
+      {/* Neck */}
+      <mesh position={[0, 0.45, 0]}>
+        <cylinderGeometry args={[0.02, 0.025, 0.04, 6]} />
+        <meshStandardMaterial color={skinColor} roughness={0.7} />
+      </mesh>
+
+      {/* Torso */}
+      <mesh ref={torsoRef} position={[0, 0.35, 0]}>
+        <boxGeometry args={[0.14, 0.2, 0.08]} />
+        <meshStandardMaterial color={style.topColor} roughness={0.7} />
+      </mesh>
+
+      {/* Shoulders (wider) */}
+      <mesh position={[0, 0.42, 0]}>
+        <boxGeometry args={[0.16, 0.03, 0.08]} />
+        <meshStandardMaterial color={style.topColor} roughness={0.7} />
+      </mesh>
+
+      {/* Left arm */}
+      <group ref={leftArmRef} position={[-0.09, 0.4, 0]}>
+        {/* Upper arm */}
+        <mesh position={[0, -0.06, 0]}>
+          <cylinderGeometry args={[0.018, 0.02, 0.12, 6]} />
+          <meshStandardMaterial color={style.topColor} roughness={0.7} />
+        </mesh>
+        {/* Elbow joint */}
+        <mesh position={[0, -0.12, 0]}>
+          <sphereGeometry args={[0.015, 6, 6]} />
+          <meshStandardMaterial color={skinColor} roughness={0.7} />
+        </mesh>
+        {/* Forearm */}
+        <mesh position={[0, -0.18, 0]}>
+          <cylinderGeometry args={[0.015, 0.018, 0.1, 6]} />
+          <meshStandardMaterial color={skinColor} roughness={0.7} />
+        </mesh>
+        {/* Hand */}
+        <mesh position={[0, -0.24, 0]}>
+          <boxGeometry args={[0.02, 0.025, 0.015]} />
+          <meshStandardMaterial color={skinColor} roughness={0.7} />
+        </mesh>
+        {/* Left arm accessories */}
+        {accessories.includes('briefcase') && <Briefcase position={[0, -0.26, 0.02]} />}
+        {accessories.includes('laptop') && <Laptop position={[0.02, -0.2, 0.03]} />}
+        {accessories.includes('books') && <Books position={[0, -0.18, 0.04]} />}
+        {accessories.includes('waterbottle') && <WaterBottle position={[0, -0.24, 0.02]} />}
+      </group>
+
+      {/* Right arm */}
+      <group ref={rightArmRef} position={[0.09, 0.4, 0]}>
+        <mesh position={[0, -0.06, 0]}>
+          <cylinderGeometry args={[0.018, 0.02, 0.12, 6]} />
+          <meshStandardMaterial color={style.topColor} roughness={0.7} />
+        </mesh>
+        <mesh position={[0, -0.12, 0]}>
+          <sphereGeometry args={[0.015, 6, 6]} />
+          <meshStandardMaterial color={skinColor} roughness={0.7} />
+        </mesh>
+        <mesh position={[0, -0.18, 0]}>
+          <cylinderGeometry args={[0.015, 0.018, 0.1, 6]} />
+          <meshStandardMaterial color={skinColor} roughness={0.7} />
+        </mesh>
+        <mesh position={[0, -0.24, 0]}>
+          <boxGeometry args={[0.02, 0.025, 0.015]} />
+          <meshStandardMaterial color={skinColor} roughness={0.7} />
+        </mesh>
+        {/* Right arm accessories */}
+        {accessories.includes('phone') && <Phone position={[0, -0.23, 0.02]} />}
+        {accessories.includes('camera') && <Camera position={[0, -0.1, 0.04]} />}
+        {accessories.includes('fitnesstracker') && <FitnessTracker position={[0, -0.2, 0]} />}
+      </group>
+
+      {/* Headphones around neck */}
+      {accessories.includes('headphones') && <Headphones position={[0, 0.44, 0.02]} />}
+
+      {/* Waist / belt area */}
+      <mesh position={[0, 0.24, 0]}>
+        <boxGeometry args={[0.12, 0.02, 0.07]} />
+        <meshStandardMaterial color="#1f2937" roughness={0.6} />
+      </mesh>
+
+      {/* Left leg */}
+      <group ref={leftLegRef} position={[-0.035, 0.23, 0]}>
+        {/* Thigh */}
+        <mesh position={[0, -0.06, 0]}>
+          <cylinderGeometry args={[0.025, 0.02, 0.12, 6]} />
+          <meshStandardMaterial color={style.bottomColor} roughness={0.7} />
+        </mesh>
+        {/* Knee joint */}
+        <mesh position={[0, -0.12, 0]}>
+          <sphereGeometry args={[0.018, 6, 6]} />
+          <meshStandardMaterial color={style.bottomColor} roughness={0.7} />
+        </mesh>
+        {/* Shin */}
+        <mesh position={[0, -0.19, 0]}>
+          <cylinderGeometry args={[0.018, 0.02, 0.12, 6]} />
+          <meshStandardMaterial color={style.bottomColor} roughness={0.7} />
+        </mesh>
+        {/* Foot */}
+        <mesh position={[0, -0.26, 0.01]}>
+          <boxGeometry args={[0.025, 0.015, 0.04]} />
+          <meshStandardMaterial color={style.shoeColor} roughness={0.6} />
+        </mesh>
+      </group>
+
+      {/* Right leg */}
+      <group ref={rightLegRef} position={[0.035, 0.23, 0]}>
+        <mesh position={[0, -0.06, 0]}>
+          <cylinderGeometry args={[0.025, 0.02, 0.12, 6]} />
+          <meshStandardMaterial color={style.bottomColor} roughness={0.7} />
+        </mesh>
+        <mesh position={[0, -0.12, 0]}>
+          <sphereGeometry args={[0.018, 6, 6]} />
+          <meshStandardMaterial color={style.bottomColor} roughness={0.7} />
+        </mesh>
+        <mesh position={[0, -0.19, 0]}>
+          <cylinderGeometry args={[0.018, 0.02, 0.12, 6]} />
+          <meshStandardMaterial color={style.bottomColor} roughness={0.7} />
+        </mesh>
+        <mesh position={[0, -0.26, 0.01]}>
+          <boxGeometry args={[0.025, 0.015, 0.04]} />
+          <meshStandardMaterial color={style.shoeColor} roughness={0.6} />
+        </mesh>
+      </group>
+
+      {/* Bag accessories */}
+      {accessories.includes('bag') && (
+        <mesh position={[0.1, 0.3, -0.03]}>
+          <boxGeometry args={[0.04, 0.08, 0.02]} />
+          <meshStandardMaterial color="#ec4899" roughness={0.6} />
+        </mesh>
+      )}
+      {accessories.includes('messengerbag') && (
+        <group>
+          <mesh position={[-0.08, 0.2, -0.01]}>
+            <boxGeometry args={[0.06, 0.08, 0.025]} />
+            <meshStandardMaterial color="#78350f" roughness={0.7} />
+          </mesh>
+          <mesh position={[0, 0.42, 0]} rotation={[0, 0, 0.3]}>
+            <boxGeometry args={[0.18, 0.005, 0.015]} />
+            <meshStandardMaterial color="#78350f" roughness={0.7} />
+          </mesh>
+        </group>
+      )}
+    </group>
+  )
+}
+
+/* =============================================
+   Main Agent Character Component
+   ============================================= */
+export function AgentCharacter({ agent }: { agent: Agent }) {
+  const groupRef = useRef<THREE.Group>(null)
+  const { selectedAgentId, setSelectedAgent, moveAgentTo, moveAgentToBuilding, editMode, buildings } = useGameStore()
+  const isSelected = selectedAgentId === agent.id
+  const [hovered, setHovered] = useState(false)
+  const posRef = useRef(new THREE.Vector3(...agent.position))
+  const targetRef = useRef<THREE.Vector3 | null>(agent.targetPosition ? new THREE.Vector3(...agent.targetPosition) : null)
+
+  // Update target when agent target changes
+  useMemo(() => {
+    if (agent.targetPosition) {
+      targetRef.current = new THREE.Vector3(...agent.targetPosition)
+    }
+  }, [agent.targetPosition])
+
+  // Determine animation state
+  const animState = agent.status === 'moving' ? 'walking' :
+                    agent.status === 'working' ? 'working' : 'idle'
+
+  useFrame((state, delta) => {
+    if (!groupRef.current) return
+
+    // Movement towards target
+    if (targetRef.current && agent.status === 'moving') {
+      const dir = targetRef.current.clone().sub(posRef.current)
+      const dist = dir.length()
+      if (dist > 0.05) {
+        dir.normalize()
+        const speed = 2
+        posRef.current.add(dir.multiplyScalar(Math.min(speed * delta, dist)))
+        // Face direction of movement
+        groupRef.current.rotation.y = Math.atan2(dir.x, dir.z)
+      } else {
+        // Arrived
+        posRef.current.copy(targetRef.current)
+        targetRef.current = null
+        // Update store — set status to idle or working
+        const store = useGameStore.getState()
+        const updatedAgents = store.agents.map(a =>
+          a.id === agent.id ? { ...a, position: [posRef.current.x, 0, posRef.current.z] as [number, number, number], status: (a.currentTaskId ? 'working' : 'idle') as Agent['status'], targetPosition: undefined } : a
+        )
+        useGameStore.setState({ agents: updatedAgents })
+      }
+    } else {
+      posRef.current.set(...agent.position)
+    }
+
+    groupRef.current.position.copy(posRef.current)
+  })
+
+  // Right-click handler is on the ground plane in CityScene
 
   return (
     <group
       ref={groupRef}
       position={agent.position}
-      onClick={(e) => { e.stopPropagation(); setSelectedAgent(agent.id) }}
+      onClick={(e) => {
+        e.stopPropagation()
+        setSelectedAgent(agent.id)
+      }}
+      onPointerOver={() => setHovered(true)}
+      onPointerOut={() => setHovered(false)}
     >
-      {/* Footstep dust */}
-      <FootstepDust position={posRef.current} active={isMoving} />
-
-      {/* Body group */}
-      <group ref={bodyGroupRef}>
-        {/* ===== TORSO with more detail ===== */}
-        <mesh ref={torsoRef} castShadow position={[0, 0.55, 0]}>
-          <boxGeometry args={[0.22, 0.35, 0.14]} />
-          <meshStandardMaterial
-            color={agent.color}
-            roughness={0.4}
-            emissive={isSelected ? agent.color : "#000000"}
-            emissiveIntensity={isSelected ? 0.4 : 0}
-          />
-        </mesh>
-
-        {/* Belt */}
-        <mesh castShadow position={[0, 0.4, 0]}>
-          <boxGeometry args={[0.24, 0.04, 0.16]} />
-          <meshStandardMaterial color="#4a3018" roughness={0.6} />
-        </mesh>
-        {/* Belt buckle */}
-        <mesh position={[0, 0.4, 0.085]}>
-          <boxGeometry args={[0.04, 0.03, 0.01]} />
-          <meshStandardMaterial color="#c9a84c" metalness={0.7} roughness={0.3} />
-        </mesh>
-
-        {/* Shoulder pads */}
-        <mesh castShadow position={[0.14, 0.72, 0]}>
-          <boxGeometry args={[0.1, 0.06, 0.16]} />
-          <meshStandardMaterial color={cloakColor} roughness={0.5} />
-        </mesh>
-        <mesh castShadow position={[-0.14, 0.72, 0]}>
-          <boxGeometry args={[0.1, 0.06, 0.16]} />
-          <meshStandardMaterial color={cloakColor} roughness={0.5} />
-        </mesh>
-        {/* Shoulder pad studs */}
-        {[0.14, -0.14].map((x, i) => (
-          <mesh key={`stud-${i}`} position={[x, 0.755, 0.06]}>
-            <sphereGeometry args={[0.012, 4, 4]} />
-            <meshStandardMaterial color="#c9a84c" metalness={0.7} roughness={0.3} />
-          </mesh>
-        ))}
-
-        {/* Collar / neckline */}
-        <mesh position={[0, 0.73, 0.02]}>
-          <boxGeometry args={[0.15, 0.03, 0.1]} />
-          <meshStandardMaterial color={cloakColor} roughness={0.5} />
-        </mesh>
-
-        {/* Cloak (behind torso) */}
-        <mesh castShadow position={[0, 0.55, -0.09]}>
-          <boxGeometry args={[0.26, 0.38, 0.04]} />
-          <meshStandardMaterial color={cloakColor} roughness={0.5} />
-        </mesh>
-        {/* Cloak bottom flap */}
-        <mesh position={[0, 0.32, -0.1]}>
-          <boxGeometry args={[0.28, 0.1, 0.03]} />
-          <meshStandardMaterial color={cloakColor} roughness={0.6} />
-        </mesh>
-
-        {/* ===== HEAD with more detail ===== */}
-        <mesh ref={headRef} castShadow position={[0, 0.87, 0]}>
-          <boxGeometry args={[0.22, 0.22, 0.2]} />
-          <meshStandardMaterial color="#f0c8a0" roughness={0.5} />
-        </mesh>
-        {/* Eyes */}
-        <mesh position={[0.06, 0.9, 0.1]}>
-          <boxGeometry args={[0.04, 0.02, 0.01]} />
-          <meshStandardMaterial color="#2a2a2a" />
-        </mesh>
-        <mesh position={[-0.06, 0.9, 0.1]}>
-          <boxGeometry args={[0.04, 0.02, 0.01]} />
-          <meshStandardMaterial color="#2a2a2a" />
-        </mesh>
-        {/* Nose */}
-        <mesh position={[0, 0.86, 0.105]}>
-          <boxGeometry args={[0.03, 0.03, 0.02]} />
-          <meshStandardMaterial color="#e0b890" roughness={0.5} />
-        </mesh>
-
-        {/* Hair */}
-        <mesh castShadow position={[0, 1.0, 0]}>
-          <boxGeometry args={[0.23, 0.06, 0.21]} />
-          <meshStandardMaterial color={cloakColor} roughness={0.6} />
-        </mesh>
-        {/* Hair sides */}
-        <mesh position={[0.115, 0.92, 0]}>
-          <boxGeometry args={[0.03, 0.12, 0.2]} />
-          <meshStandardMaterial color={cloakColor} roughness={0.6} />
-        </mesh>
-        <mesh position={[-0.115, 0.92, 0]}>
-          <boxGeometry args={[0.03, 0.12, 0.2]} />
-          <meshStandardMaterial color={cloakColor} roughness={0.6} />
-        </mesh>
-
-        {/* ===== ARMS with more detail ===== */}
-        {/* Left arm */}
-        <group ref={leftArmRef} position={[0.17, 0.65, 0]}>
-          {/* Upper arm */}
-          <mesh castShadow position={[0, -0.08, 0]}>
-            <boxGeometry args={[0.08, 0.16, 0.08]} />
-            <meshStandardMaterial color={agent.color} roughness={0.4} />
-          </mesh>
-          {/* Forearm */}
-          <mesh castShadow position={[0, -0.22, 0]}>
-            <boxGeometry args={[0.07, 0.14, 0.07]} />
-            <meshStandardMaterial color="#f0c8a0" roughness={0.5} />
-          </mesh>
-          {/* Glove / hand */}
-          <mesh position={[0, -0.3, 0]}>
-            <boxGeometry args={[0.06, 0.04, 0.06]} />
-            <meshStandardMaterial color="#6a5a3a" roughness={0.7} />
-          </mesh>
-        </group>
-
-        {/* Right arm */}
-        <group ref={rightArmRef} position={[-0.17, 0.65, 0]}>
-          <mesh castShadow position={[0, -0.08, 0]}>
-            <boxGeometry args={[0.08, 0.16, 0.08]} />
-            <meshStandardMaterial color={agent.color} roughness={0.4} />
-          </mesh>
-          <mesh castShadow position={[0, -0.22, 0]}>
-            <boxGeometry args={[0.07, 0.14, 0.07]} />
-            <meshStandardMaterial color="#f0c8a0" roughness={0.5} />
-          </mesh>
-          <mesh position={[0, -0.3, 0]}>
-            <boxGeometry args={[0.06, 0.04, 0.06]} />
-            <meshStandardMaterial color="#6a5a3a" roughness={0.7} />
-          </mesh>
-        </group>
-
-        {/* ===== LEGS with boots ===== */}
-        {/* Left leg */}
-        <group ref={leftLegRef} position={[0.07, 0.35, 0]}>
-          {/* Thigh */}
-          <mesh castShadow position={[0, -0.1, 0]}>
-            <boxGeometry args={[0.1, 0.2, 0.1]} />
-            <meshStandardMaterial color="#3a3a5a" roughness={0.5} />
-          </mesh>
-          {/* Boot */}
-          <mesh castShadow position={[0, -0.24, 0.01]}>
-            <boxGeometry args={[0.1, 0.12, 0.13]} />
-            <meshStandardMaterial color="#4a3018" roughness={0.7} />
-          </mesh>
-          {/* Boot sole */}
-          <mesh position={[0, -0.3, 0.015]}>
-            <boxGeometry args={[0.11, 0.02, 0.14]} />
-            <meshStandardMaterial color="#2a1a08" roughness={0.9} />
-          </mesh>
-          {/* Boot strap */}
-          <mesh position={[0, -0.2, 0.06]}>
-            <boxGeometry args={[0.1, 0.02, 0.015]} />
-            <meshStandardMaterial color="#3a2510" roughness={0.6} />
-          </mesh>
-        </group>
-
-        {/* Right leg */}
-        <group ref={rightLegRef} position={[-0.07, 0.35, 0]}>
-          <mesh castShadow position={[0, -0.1, 0]}>
-            <boxGeometry args={[0.1, 0.2, 0.1]} />
-            <meshStandardMaterial color="#3a3a5a" roughness={0.5} />
-          </mesh>
-          <mesh castShadow position={[0, -0.24, 0.01]}>
-            <boxGeometry args={[0.1, 0.12, 0.13]} />
-            <meshStandardMaterial color="#4a3018" roughness={0.7} />
-          </mesh>
-          <mesh position={[0, -0.3, 0.015]}>
-            <boxGeometry args={[0.11, 0.02, 0.14]} />
-            <meshStandardMaterial color="#2a1a08" roughness={0.9} />
-          </mesh>
-          <mesh position={[0, -0.2, 0.06]}>
-            <boxGeometry args={[0.1, 0.02, 0.015]} />
-            <meshStandardMaterial color="#3a2510" roughness={0.6} />
-          </mesh>
-        </group>
-
-        {/* ===== Unique Agent Accessory ===== */}
-        <AgentAccessory agentId={agent.id} color={agent.color} />
-      </group>
-
-      {/* Status bubble above head */}
-      <Billboard position={[0, 1.25, 0]}>
-        <Text fontSize={0.14} anchorX="center" anchorY="middle">{statusBubble}</Text>
-      </Billboard>
-
-      {/* Emoji on chest */}
-      <Billboard position={[0, 0.55, 0.09]}>
-        <Text fontSize={0.12} anchorX="center" anchorY="middle">{agent.emoji}</Text>
-      </Billboard>
-
-      {/* Name */}
-      <Billboard position={[0, 1.45, 0]}>
-        <Text fontSize={0.11} color={isSelected ? "#c9a84c" : "#e8dcc8"} anchorX="center" anchorY="middle" outlineWidth={0.02} outlineColor="#0d1117">
-          {agent.name}
-        </Text>
-      </Billboard>
-      <Billboard position={[0, 1.3, 0]}>
-        <Text fontSize={0.09} color="#8b8680" anchorX="center" anchorY="middle">
-          {agent.role}
-        </Text>
-      </Billboard>
+      {/* Humanoid body */}
+      <HumanoidBody agentId={agent.id} animState={animState} />
 
       {/* Selection ring */}
       {isSelected && (
         <mesh position={[0, 0.02, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-          <ringGeometry args={[0.3, 0.42, 32]} />
-          <meshStandardMaterial color="#c9a84c" emissive="#c9a84c" emissiveIntensity={1.0} transparent opacity={0.9} />
+          <ringGeometry args={[0.5, 0.6, 32]} />
+          <meshStandardMaterial color="#0ea5e9" emissive="#0ea5e9" emissiveIntensity={2} transparent opacity={0.8} side={THREE.DoubleSide} />
         </mesh>
       )}
 
-      {/* Shadow */}
-      <mesh position={[0, 0.01, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-        <circleGeometry args={[0.18, 8]} />
-        <meshStandardMaterial color="#000000" transparent opacity={0.2} />
-      </mesh>
+      {/* Hover highlight */}
+      {hovered && !isSelected && (
+        <mesh position={[0, 0.02, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+          <ringGeometry args={[0.5, 0.55, 32]} />
+          <meshStandardMaterial color="#94a3b8" transparent opacity={0.4} side={THREE.DoubleSide} />
+        </mesh>
+      )}
+
+      {/* Name label */}
+      <Billboard position={[0, 2.8, 0]}>
+        <Text fontSize={0.2} color={isSelected ? '#0ea5e9' : '#e2e8f0'} anchorX="center" anchorY="middle" outlineWidth={0.02} outlineColor="#0f172a">
+          {agent.emoji} {agent.name.split(' ')[0]}
+        </Text>
+      </Billboard>
+
+      {/* Role */}
+      <Billboard position={[0, 2.5, 0]}>
+        <Text fontSize={0.12} color="#94a3b8" anchorX="center" anchorY="middle">
+          {agent.role}
+        </Text>
+      </Billboard>
+
+      {/* Status indicator */}
+      <Billboard position={[0, 2.25, 0]}>
+        <Text
+          fontSize={0.1}
+          color={agent.status === 'idle' ? '#22c55e' : agent.status === 'working' ? '#eab308' : '#0ea5e9'}
+          anchorX="center"
+          anchorY="middle"
+        >
+          {agent.status === 'idle' ? '● Idle' : agent.status === 'working' ? '◐ Working' : '→ Moving'}
+        </Text>
+      </Billboard>
+
+      {/* Movement path line (shown when moving) */}
+      {agent.status === 'moving' && agent.targetPosition && (
+        <group>
+          {/* Destination marker */}
+          <mesh position={[agent.targetPosition[0] - agent.position[0], 0.05, agent.targetPosition[2] - agent.position[2]]} rotation={[-Math.PI / 2, 0, 0]}>
+            <ringGeometry args={[0.3, 0.4, 16]} />
+            <meshStandardMaterial color="#0ea5e9" emissive="#0ea5e9" emissiveIntensity={1.5} transparent opacity={0.6} side={THREE.DoubleSide} />
+          </mesh>
+        </group>
+      )}
     </group>
   )
 }

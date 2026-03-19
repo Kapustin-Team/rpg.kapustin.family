@@ -1,123 +1,98 @@
-"use client"
-import { useState } from "react"
-import { useGameStore } from "@/store/gameStore"
-import { BUILDING_TEMPLATES } from "@/data/buildings"
+'use client'
 
-export function BuildMenu() {
-  const [open, setOpen] = useState(false)
+import { useGameStore } from '@/store/gameStore'
+import { BUILDING_TEMPLATES } from '@/data/buildings'
+
+export default function BuildMenu() {
   const resources = useGameStore((s) => s.resources)
-  const setBuildingPlacementType = useGameStore((s) => s.setBuildingPlacementType)
   const buildingPlacementType = useGameStore((s) => s.buildingPlacementType)
+  const setBuildingPlacementType = useGameStore((s) => s.setBuildingPlacementType)
 
-  const getResource = (type: string) => resources.find((r) => r.type === type)?.amount ?? 0
-
-  const canAfford = (t: (typeof BUILDING_TEMPLATES)[0]) =>
-    getResource("gold") >= t.costGold &&
-    getResource("wood") >= t.costWood &&
-    getResource("stone") >= t.costStone
+  const gold = resources.find((r) => r.type === 'gold')?.amount ?? 0
+  const wood = resources.find((r) => r.type === 'wood')?.amount ?? 0
+  const stone = resources.find((r) => r.type === 'stone')?.amount ?? 0
 
   return (
-    <>
-      {/* Placement tooltip */}
-      {buildingPlacementType && (
-        <div
-          style={{
-            position: "absolute",
-            top: 60,
-            left: "50%",
-            transform: "translateX(-50%)",
-            background: "rgba(13,17,23,0.92)",
-            border: "1px solid #c9a84c",
-            borderRadius: 4,
-            padding: "6px 16px",
-            color: "#c9a84c",
-            fontSize: 13,
-            fontFamily: "'Crimson Text', serif",
-            zIndex: 100,
-            whiteSpace: "nowrap",
-          }}
-        >
-          Click on the map to place{" "}
-          <strong>
-            {BUILDING_TEMPLATES.find((t) => t.type === buildingPlacementType)?.name}
-          </strong>
-          . Press ESC to cancel.
-        </div>
-      )}
+    <div
+      className="rounded-xl p-4 backdrop-blur-md border w-72"
+      style={{
+        background: 'linear-gradient(135deg, rgba(15,23,42,0.95), rgba(30,41,59,0.9))',
+        borderColor: 'rgba(14,165,233,0.2)',
+      }}
+    >
+      <h2 className="text-sm font-bold mb-3 flex items-center gap-2" style={{ color: '#e2e8f0' }}>
+        <span>🏗️</span> Build Menu
+      </h2>
 
-      {/* Building cards */}
-      {open && (
-        <div
-          style={{
-            position: "absolute",
-            bottom: 56,
-            left: "50%",
-            transform: "translateX(-50%)",
-            display: "flex",
-            gap: 8,
-            zIndex: 100,
-          }}
-        >
-          {BUILDING_TEMPLATES.map((t) => {
-            const affordable = canAfford(t)
-            return (
-              <div
-                key={t.type}
-                onClick={() => {
-                  if (!affordable) return
-                  setBuildingPlacementType(t.type)
-                  setOpen(false)
-                }}
-                style={{
-                  width: 120,
-                  padding: "10px 8px",
-                  background: "rgba(13,17,23,0.95)",
-                  border: `1px solid ${affordable ? "#c9a84c" : "#4a4a4a"}`,
-                  borderRadius: 4,
-                  cursor: affordable ? "pointer" : "not-allowed",
-                  opacity: affordable ? 1 : 0.5,
-                  fontFamily: "'Crimson Text', serif",
-                  color: "#e8dcc8",
-                  textAlign: "center",
-                }}
-              >
-                <div style={{ fontSize: 24, marginBottom: 4 }}>{t.emoji}</div>
-                <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 6 }}>{t.name}</div>
-                <div style={{ display: "flex", justifyContent: "center", gap: 6, fontSize: 10, color: "#8b8680" }}>
-                  {t.costGold > 0 && <span>🪙{t.costGold}</span>}
-                  {t.costWood > 0 && <span>🪵{t.costWood}</span>}
-                  {t.costStone > 0 && <span>🪨{t.costStone}</span>}
-                  {t.costGold === 0 && t.costWood === 0 && t.costStone === 0 && <span>Free</span>}
-                </div>
+      <div className="space-y-2">
+        {BUILDING_TEMPLATES.filter(t => t.type !== 'hq').map((template) => {
+          const canAfford =
+            gold >= template.costGold &&
+            wood >= template.costWood &&
+            stone >= template.costStone
+          const isActive = buildingPlacementType === template.type
+
+          return (
+            <button
+              key={template.type}
+              onClick={() =>
+                setBuildingPlacementType(isActive ? null : template.type)
+              }
+              disabled={!canAfford}
+              className="w-full text-left p-3 rounded-lg border transition-all"
+              style={{
+                background: isActive
+                  ? `${template.color}20`
+                  : canAfford
+                  ? 'rgba(30,41,59,0.5)'
+                  : 'rgba(30,41,59,0.3)',
+                borderColor: isActive
+                  ? template.color
+                  : canAfford
+                  ? 'rgba(100,116,139,0.2)'
+                  : 'rgba(100,116,139,0.1)',
+                opacity: canAfford ? 1 : 0.5,
+                cursor: canAfford ? 'pointer' : 'not-allowed',
+              }}
+            >
+              <div className="flex items-center gap-2 mb-1">
+                <span className="text-lg">{template.emoji}</span>
+                <span className="text-sm font-bold" style={{ color: '#e2e8f0' }}>
+                  {template.name}
+                </span>
               </div>
-            )
-          })}
-        </div>
-      )}
-
-      {/* Toggle button */}
-      <button
-        onClick={() => setOpen(!open)}
-        style={{
-          position: "absolute",
-          bottom: 16,
-          left: "50%",
-          transform: "translateX(-50%)",
-          background: "rgba(13,17,23,0.92)",
-          border: "1px solid #c9a84c",
-          color: "#c9a84c",
-          padding: "8px 24px",
-          borderRadius: 4,
-          fontSize: 14,
-          fontFamily: "Cinzel, serif",
-          cursor: "pointer",
-          letterSpacing: 1,
-          zIndex: 100,
-          boxShadow: "0 0 20px rgba(201,168,76,0.15)",
-        }}
-      >
-        {open ? "x CLOSE" : "⚒ BUILD"}
-      </button>
-    </>
+              <div className="text-xs mb-1" style={{ color: '#94a3b8' }}>
+                {template.description}
+              </div>
+              <div className="flex gap-2 text-xs" style={{ color: '#64748b' }}>
+                {template.costGold > 0 && (
+                  <span style={{ color: gold >= template.costGold ? '#fbbf24' : '#ef4444' }}>
+                    🪙{template.costGold}
+                  </span>
+                )}
+                {template.costWood > 0 && (
+                  <span style={{ color: wood >= template.costWood ? '#8b5e3c' : '#ef4444' }}>
+                    🪵{template.costWood}
+                  </span>
+                )}
+                {template.costStone > 0 && (
+                  <span style={{ color: stone >= template.costStone ? '#6b7280' : '#ef4444' }}>
+                    🪨{template.costStone}
+                  </span>
+                )}
+                <span className="ml-auto" style={{ color: '#0ea5e9' }}>
+                  👷 {template.workerSlots} slots
+                </span>
+              </div>
+              {isActive && (
+                <div className="text-xs mt-1 font-bold" style={{ color: '#22d3ee' }}>
+                  Click on map to place!
+                </div>
+              )}
+            </button>
+          )
+        })}
+      </div>
+    </div>
   )
 }

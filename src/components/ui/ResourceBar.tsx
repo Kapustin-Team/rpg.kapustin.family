@@ -2,80 +2,54 @@
 
 import { useGameStore } from '@/store/gameStore'
 
-const RESOURCE_ORDER = ['food', 'wood', 'stone', 'gold', 'knowledge', 'data', 'code'] as const
-
-export function ResourceBar() {
-  const { resources } = useGameStore()
-
-  const topResources = RESOURCE_ORDER
-    .map(type => resources.find(r => r.type === type))
-    .filter(Boolean) as typeof resources
+export default function ResourceBar() {
+  const resources = useGameStore((s) => s.resources)
 
   return (
-    <div style={{
-      position: 'absolute',
-      top: 0, left: 0, right: 0,
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      gap: 2,
-      padding: '6px 16px',
-      background: 'rgba(13, 17, 23, 0.95)',
-      borderBottom: '2px solid rgba(201, 168, 76, 0.4)',
-      boxShadow: '0 2px 20px rgba(201, 168, 76, 0.1)',
-      zIndex: 10,
-      fontFamily: 'Crimson Text, serif',
-    }}>
-      {/* Game title */}
-      <div style={{
-        fontFamily: 'Cinzel, serif',
-        fontSize: 13,
-        fontWeight: 700,
-        color: '#c9a84c',
-        marginRight: 16,
-        letterSpacing: 1,
-        textShadow: '0 0 10px rgba(201, 168, 76, 0.3)',
-        whiteSpace: 'nowrap',
-      }}>
-        NORTH GARD
-      </div>
-
-      {/* Divider */}
-      <div style={{ width: 1, height: 24, background: 'rgba(201, 168, 76, 0.3)', marginRight: 8 }} />
-
-      {/* Resources */}
-      {topResources.map((resource) => (
-        <div key={resource.type} style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 4,
-          padding: '3px 10px',
-          borderRadius: 4,
-          background: 'rgba(201, 168, 76, 0.05)',
-          border: '1px solid rgba(201, 168, 76, 0.15)',
-        }}>
-          <span style={{ fontSize: 14 }}>{resource.icon}</span>
-          <span style={{
-            fontSize: 13,
-            fontFamily: "'Courier New', monospace",
-            fontWeight: 700,
-            color: '#e8c97e',
-            minWidth: 32,
-            textAlign: 'right',
-            fontVariantNumeric: 'tabular-nums',
-          }}>
-            {Math.floor(resource.amount).toLocaleString()}
-          </span>
-          <span style={{
-            fontSize: 9,
-            color: '#2d5a27',
-            fontFamily: "'Courier New', monospace",
-            fontWeight: 700,
-          }}>
-            +{resource.productionRate}
-          </span>
-        </div>
-      ))}
+    <div
+      className="rounded-xl p-2.5 backdrop-blur-md border flex flex-wrap gap-2"
+      style={{
+        background: 'linear-gradient(135deg, rgba(15,23,42,0.9), rgba(30,41,59,0.85))',
+        borderColor: 'rgba(14,165,233,0.2)',
+      }}
+    >
+      {resources.map((r) => {
+        const pct = (r.amount / r.maxCapacity) * 100
+        return (
+          <div
+            key={r.type}
+            className="flex items-center gap-1.5 px-2 py-1 rounded-lg"
+            style={{
+              background: 'rgba(30,41,59,0.5)',
+              border: `1px solid ${r.color}22`,
+              minWidth: 90,
+            }}
+            title={`${r.label}: ${Math.floor(r.amount)}/${r.maxCapacity} (+${r.productionRate}/tick)`}
+          >
+            <span className="text-sm">{r.icon}</span>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-baseline gap-1">
+                <span className="text-xs font-bold" style={{ color: r.color }}>
+                  {Math.floor(r.amount)}
+                </span>
+                <span className="text-xs" style={{ color: '#475569' }}>
+                  /{r.maxCapacity}
+                </span>
+              </div>
+              <div className="h-0.5 rounded-full overflow-hidden" style={{ background: 'rgba(30,41,59,0.6)' }}>
+                <div
+                  className="h-full rounded-full transition-all"
+                  style={{
+                    width: `${pct}%`,
+                    background: r.color,
+                    boxShadow: `0 0 4px ${r.color}80`,
+                  }}
+                />
+              </div>
+            </div>
+          </div>
+        )
+      })}
     </div>
   )
 }

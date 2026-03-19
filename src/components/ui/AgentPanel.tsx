@@ -1,181 +1,115 @@
-"use client"
-import { useGameStore } from "@/store/gameStore"
+'use client'
 
-export function AgentPanel() {
-  const selectedAgentId = useGameStore((s) => s.selectedAgentId)
+import { useGameStore } from '@/store/gameStore'
+
+export default function AgentPanel() {
   const agents = useGameStore((s) => s.agents)
-  const tasks = useGameStore((s) => s.tasks)
+  const selectedAgentId = useGameStore((s) => s.selectedAgentId)
   const setSelectedAgent = useGameStore((s) => s.setSelectedAgent)
-  const assignTaskToAgent = useGameStore((s) => s.assignTaskToAgent)
+  const tasks = useGameStore((s) => s.tasks)
 
   const agent = agents.find((a) => a.id === selectedAgentId)
   if (!agent) return null
 
-  const todoTasks = tasks.filter((t) => t.status === "todo")
-
-  const statusColors: Record<string, string> = {
-    idle: "#84cc16",
-    working: "#eab308",
-    moving: "#06b6d4",
-    done: "#10b981",
-  }
+  const currentTask = tasks.find((t) => t.id === agent.currentTaskId)
 
   return (
     <div
+      className="rounded-xl p-4 backdrop-blur-md border"
       style={{
-        position: "absolute",
-        right: 16,
-        top: "50%",
-        transform: "translateY(-50%)",
-        width: 280,
-        maxHeight: "70vh",
-        overflowY: "auto",
-        background: "rgba(13,17,23,0.95)",
-        border: "1px solid #c9a84c",
-        boxShadow: "0 0 30px rgba(201,168,76,0.2)",
-        borderRadius: 4,
-        fontFamily: "'Crimson Text', serif",
-        color: "#e8dcc8",
-        zIndex: 100,
+        background: 'linear-gradient(135deg, rgba(15,23,42,0.95), rgba(30,41,59,0.9))',
+        borderColor: `${agent.color}44`,
       }}
     >
       {/* Header */}
-      <div
-        style={{
-          padding: "12px 14px",
-          borderBottom: "1px solid rgba(201,168,76,0.3)",
-          background: `linear-gradient(135deg, rgba(13,17,23,0.9), ${agent.color}22)`,
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-        }}
-      >
-        <span
-          style={{
-            fontFamily: "Cinzel, serif",
-            fontSize: 13,
-            color: "#c9a84c",
-            letterSpacing: 1,
-          }}
-        >
-          AGENT: {agent.name.split(" ")[0].toUpperCase()}
-        </span>
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2">
+          <span className="text-2xl">{agent.emoji}</span>
+          <div>
+            <div className="text-white font-bold text-sm">{agent.name}</div>
+            <div className="text-xs" style={{ color: agent.color }}>
+              {agent.role}
+            </div>
+          </div>
+        </div>
         <button
           onClick={() => setSelectedAgent(null)}
-          style={{
-            background: "none",
-            border: "none",
-            color: "#8b8680",
-            cursor: "pointer",
-            fontSize: 16,
-            padding: "0 4px",
-          }}
+          className="w-6 h-6 rounded-full flex items-center justify-center text-xs"
+          style={{ background: 'rgba(100,116,139,0.2)', color: '#94a3b8' }}
         >
-          x
+          ✕
         </button>
       </div>
 
-      {/* Body */}
-      <div style={{ padding: "12px 14px" }}>
-        {/* Avatar + role */}
-        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
-          <span style={{ fontSize: 32 }}>{agent.emoji}</span>
-          <div>
-            <div style={{ fontSize: 15, fontWeight: 600 }}>{agent.name}</div>
-            <div style={{ fontSize: 12, color: "#8b8680" }}>{agent.role}</div>
-          </div>
-        </div>
-
-        {/* Status */}
-        <div style={{ marginBottom: 10, display: "flex", alignItems: "center", gap: 6 }}>
-          <div
-            style={{
-              width: 8,
-              height: 8,
-              borderRadius: "50%",
-              background: statusColors[agent.status] || "#6b7280",
-              boxShadow: `0 0 6px ${statusColors[agent.status] || "#6b7280"}`,
-            }}
-          />
-          <span style={{ fontSize: 12, color: "#8b8680", textTransform: "capitalize" }}>
-            {agent.status}
-          </span>
-        </div>
-
-        {/* Specializations */}
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginBottom: 14 }}>
-          {agent.specialization.map((s) => (
-            <span
-              key={s}
-              style={{
-                fontSize: 10,
-                padding: "2px 8px",
-                borderRadius: 10,
-                background: `${agent.color}22`,
-                border: `1px solid ${agent.color}44`,
-                color: agent.color,
-              }}
-            >
-              {s}
-            </span>
-          ))}
-        </div>
-
-        {/* Description */}
-        <div style={{ fontSize: 12, color: "#8b8680", marginBottom: 14 }}>
-          {agent.description}
-        </div>
-
-        {/* Tasks */}
-        <div
+      {/* Status */}
+      <div className="flex items-center gap-2 mb-3">
+        <span
+          className="px-2 py-0.5 rounded-full text-xs font-bold"
           style={{
-            fontFamily: "Cinzel, serif",
-            fontSize: 11,
-            color: "#c9a84c",
-            letterSpacing: 1,
-            marginBottom: 8,
+            background: agent.status === 'idle'
+              ? 'rgba(34,197,94,0.15)'
+              : agent.status === 'working'
+              ? 'rgba(234,179,8,0.15)'
+              : 'rgba(14,165,233,0.15)',
+            color: agent.status === 'idle'
+              ? '#22c55e'
+              : agent.status === 'working'
+              ? '#eab308'
+              : '#0ea5e9',
+            border: `1px solid ${
+              agent.status === 'idle'
+                ? 'rgba(34,197,94,0.3)'
+                : agent.status === 'working'
+                ? 'rgba(234,179,8,0.3)'
+                : 'rgba(14,165,233,0.3)'
+            }`,
           }}
         >
-          AVAILABLE QUESTS
-        </div>
-        {todoTasks.length === 0 ? (
-          <div style={{ fontSize: 12, color: "#8b8680" }}>No quests available</div>
-        ) : (
-          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-            {todoTasks.map((task) => (
-              <div
-                key={task.id}
-                style={{
-                  padding: "8px 10px",
-                  background: "rgba(201,168,76,0.05)",
-                  border: "1px solid rgba(201,168,76,0.15)",
-                  borderRadius: 3,
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                }}
-              >
-                <div style={{ fontSize: 12, flex: 1, marginRight: 8 }}>{task.title}</div>
-                <button
-                  onClick={() => assignTaskToAgent(agent.id, task.id)}
-                  style={{
-                    background: "rgba(201,168,76,0.15)",
-                    border: "1px solid #c9a84c",
-                    color: "#c9a84c",
-                    fontSize: 10,
-                    padding: "3px 8px",
-                    borderRadius: 3,
-                    cursor: "pointer",
-                    whiteSpace: "nowrap",
-                    fontFamily: "Cinzel, serif",
-                  }}
-                >
-                  Assign
-                </button>
-              </div>
-            ))}
+          {agent.status === 'idle' ? '● Idle' : agent.status === 'working' ? '◐ Working' : '→ Moving'}
+        </span>
+      </div>
+
+      {/* Description */}
+      <p className="text-xs mb-3" style={{ color: '#94a3b8' }}>
+        {agent.description}
+      </p>
+
+      {/* Specializations */}
+      <div className="flex flex-wrap gap-1 mb-3">
+        {agent.specialization.map((spec) => (
+          <span
+            key={spec}
+            className="px-2 py-0.5 rounded text-xs"
+            style={{ background: 'rgba(14,165,233,0.1)', color: '#0ea5e9' }}
+          >
+            {spec}
+          </span>
+        ))}
+      </div>
+
+      {/* Current task */}
+      {currentTask && (
+        <div
+          className="p-2 rounded-lg mb-3"
+          style={{ background: 'rgba(234,179,8,0.1)', border: '1px solid rgba(234,179,8,0.2)' }}
+        >
+          <div className="text-xs font-bold" style={{ color: '#eab308' }}>
+            Current Task:
           </div>
-        )}
+          <div className="text-xs mt-1" style={{ color: '#e2e8f0' }}>
+            {currentTask.title}
+          </div>
+        </div>
+      )}
+
+      {/* Position */}
+      <div className="text-xs" style={{ color: '#64748b' }}>
+        📍 Position: ({agent.position[0].toFixed(1)}, {agent.position[2].toFixed(1)})
+      </div>
+
+      {/* Right-click hint */}
+      <div className="mt-2 text-xs" style={{ color: '#475569' }}>
+        💡 Right-click on ground/building to move agent
       </div>
     </div>
   )
