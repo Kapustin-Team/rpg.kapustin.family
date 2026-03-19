@@ -2,8 +2,8 @@ import type { Metadata } from 'next'
 import './globals.css'
 
 export const metadata: Metadata = {
-  title: 'North Gard — Kapustin Kingdom',
-  description: 'North Gard-style 3D city builder with task & resource management',
+  title: 'RPG City — Agent & Task Control Panel',
+  description: 'Agent & Task Control Panel for Kapustin Team',
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

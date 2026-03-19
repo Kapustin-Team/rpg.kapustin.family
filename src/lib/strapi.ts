@@ -2,7 +2,7 @@ const STRAPI_URL = process.env.NEXT_PUBLIC_STRAPI_URL || 'https://strapi.kapusti
 const STRAPI_TOKEN = process.env.NEXT_PUBLIC_STRAPI_TOKEN || ''
 
 async function fetchStrapi<T>(path: string): Promise<T> {
-  const res = await fetch(`${STRAPI_URL}/api${path}?populate=*&pagination[limit]=100`, {
+  const res = await fetch(`${STRAPI_URL}/api${path}`, {
     headers: {
       'Content-Type': 'application/json',
       ...(STRAPI_TOKEN ? { Authorization: `Bearer ${STRAPI_TOKEN}` } : {}),
@@ -23,21 +23,8 @@ export interface StrapiTask {
   category?: string
   dueDate?: string
   xpReward: number
-  rpgCategory?: 'build' | 'research' | 'trade' | 'defense' | 'exploration'
+  rpgCategory?: string
   energyCost?: number
-}
-
-export interface StrapiAgentTask {
-  id: number
-  documentId: string
-  title: string
-  agentName: string
-  taskType: string
-  status: string
-  labeledCount?: number
-  totalCount?: number
-  qualityScore?: number
-  completedAt?: string
 }
 
 export interface StrapiRpgCharacter {
@@ -50,22 +37,6 @@ export interface StrapiRpgCharacter {
   class: string
   streakDays: number
   totalTasksCompleted: number
-  stats?: Record<string, number>
-}
-
-export interface StrapiRpgBuilding {
-  id: number
-  documentId: string
-  name: string
-  buildingType: string
-  level: number
-  status: string
-  positionX?: number
-  positionY?: number
-  positionZ?: number
-  rotationY?: number
-  constructionProgress: number
-  model3dKey?: string
 }
 
 export interface StrapiRpgResource {
@@ -81,9 +52,7 @@ export interface StrapiRpgResource {
 }
 
 export const strapiApi = {
-  tasks: () => fetchStrapi<StrapiTask[]>('/tasks?filters[status][$ne]=cancelled&sort=priority:desc,createdAt:desc'),
-  agentTasks: () => fetchStrapi<StrapiAgentTask[]>('/agent-tasks?sort=createdAt:desc'),
+  tasks: () => fetchStrapi<StrapiTask[]>('/tasks?populate=*&pagination[limit]=100&filters[status][$ne]=cancelled&sort=priority:desc,createdAt:desc'),
   character: () => fetchStrapi<StrapiRpgCharacter[]>('/rpg-characters?pagination[limit]=1'),
-  buildings: () => fetchStrapi<StrapiRpgBuilding[]>('/rpg-buildings?sort=createdAt:asc'),
   resources: () => fetchStrapi<StrapiRpgResource[]>('/rpg-resources'),
 }
