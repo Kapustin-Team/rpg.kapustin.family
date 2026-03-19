@@ -207,29 +207,46 @@ function TaskCard({ task, isFlashing }: { task: Task; isFlashing: boolean }) {
     setCompleting(false)
   }
 
-  function handleAssign(agentId: string) {
+  async function handleAssign(agentId: string) {
+    console.log(`[UI] 🎯 Assigning task "${task.title}" to ${agentId}`)
     assignTaskToAgent(agentId, task.id)
+
     // Update Strapi
     if (task.documentId) {
-      fetch(`/api/tasks/${task.documentId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: 'in_progress' }),
-      }).catch(() => {})
+      console.log(`[UI] 📤 Updating Strapi task ${task.documentId} → in_progress`)
+      try {
+        const strapiRes = await fetch(`/api/tasks/${task.documentId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status: 'in_progress' }),
+        })
+        const strapiData = await strapiRes.json()
+        console.log(`[UI] 📥 Strapi response:`, strapiData)
+      } catch (err) {
+        console.error(`[UI] ❌ Strapi update failed:`, err)
+      }
     }
-    // Notify agent about the assignment
-    fetch('/api/assign-task', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        taskTitle: task.title,
-        taskDescription: '',
-        agentId,
-        xpReward: task.xpReward,
-        priority: task.priority,
-        category: task.rpgCategory,
-      }),
-    }).catch(() => {})
+
+    // Notify agent
+    console.log(`[UI] 📤 Calling /api/assign-task...`)
+    try {
+      const assignRes = await fetch('/api/assign-task', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          taskTitle: task.title,
+          taskDescription: '',
+          agentId,
+          xpReward: task.xpReward,
+          priority: task.priority,
+          category: task.rpgCategory,
+        }),
+      })
+      const assignData = await assignRes.json()
+      console.log(`[UI] 📥 Assign response:`, JSON.stringify(assignData, null, 2))
+    } catch (err) {
+      console.error(`[UI] ❌ Assign failed:`, err)
+    }
   }
 
   return (
