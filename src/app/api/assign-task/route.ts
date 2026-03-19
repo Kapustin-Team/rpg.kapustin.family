@@ -5,7 +5,8 @@ export const dynamic = 'force-dynamic'
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || ''
 const TELEGRAM_CHAT_ID = '-1003805137798'
 const TELEGRAM_TOPIC_ID = '60'
-const N8N_WEBHOOK_URL = process.env.N8N_WEBHOOK_URL || 'https://n8n.kpstn.ru/webhook/rpg-assign-task'
+const OPENCLAW_HOOKS_URL = process.env.OPENCLAW_HOOKS_URL || ''
+const OPENCLAW_HOOKS_TOKEN = process.env.OPENCLAW_HOOKS_TOKEN || ''
 
 // Agent info
 const AGENTS: Record<string, { name: string; emoji: string; account: string }> = {
@@ -16,7 +17,7 @@ const AGENTS: Record<string, { name: string; emoji: string; account: string }> =
   jovana: { name: 'Jovana', emoji: '💪', account: 'main-jovana' },
 }
 
-// Send Telegram notification (visual, for humans)
+// Visual notification for Dima in Telegram group
 async function sendTelegram(text: string) {
   if (!TELEGRAM_BOT_TOKEN) return false
   try {
@@ -34,24 +35,36 @@ async function sendTelegram(text: string) {
   } catch { return false }
 }
 
-// Send task to agent session via n8n → OpenClaw hooks
+// Send task directly to agent session via OpenClaw hooks/agent
 async function notifyAgent(agentId: string, message: string) {
+  if (!OPENCLAW_HOOKS_URL || !OPENCLAW_HOOKS_TOKEN) {
+    console.error('OpenClaw hooks not configured')
+    return false
+  }
   try {
     const agent = AGENTS[agentId]
     if (!agent) return false
 
-    const res = await fetch(N8N_WEBHOOK_URL, {
+    const res = await fetch(`${OPENCLAW_HOOKS_URL}/agent`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${OPENCLAW_HOOKS_TOKEN}`,
+      },
       body: JSON.stringify({
         message,
         agentId: agent.account,
+        sessionKey: `hook:rpg:task:${Date.now()}`,
+        deliver: true,
+        channel: 'telegram',
+        to: TELEGRAM_CHAT_ID,
+        timeoutSeconds: 120,
       }),
     })
-    console.log(`n8n webhook response: ${res.status}`)
+    console.log(`OpenClaw hooks/agent response: ${res.status}`)
     return res.ok
   } catch (err) {
-    console.error('n8n notify failed:', err)
+    console.error('OpenClaw notify failed:', err)
     return false
   }
 }
@@ -69,7 +82,7 @@ export async function POST(req: Request) {
       critical: '🔴', high: '🟠', medium: '🟡', low: '⚪',
     }
 
-    // 1. Telegram bot notification (visual for Dima)
+    // 1. Telegram bot → group (visual for Dima)
     const tgMessage = [
       `📋 <b>Новая задача назначена!</b>`,
       ``,
@@ -81,7 +94,7 @@ export async function POST(req: Request) {
     ].filter(Boolean).join('\n')
     const tgSent = await sendTelegram(tgMessage)
 
-    // 2. Agent session via n8n → OpenClaw hooks/agent
+    // 2. OpenClaw hooks/agent → agent session (actual task delivery)
     const agentMessage = [
       `📋 Новая задача из RPG City Control Panel:`,
       ``,
