@@ -130,17 +130,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
   loadFromStrapi: async () => {
     try {
-      const STRAPI_URL = process.env.NEXT_PUBLIC_STRAPI_URL || 'https://strapi.kapustin.family'
-      const TOKEN = process.env.NEXT_PUBLIC_STRAPI_TOKEN || ''
-      const res = await fetch(
-        `${STRAPI_URL}/api/tasks?populate=*&pagination[limit]=100&sort=priority:desc&filters[status][$ne]=cancelled`,
-        {
-          headers: {
-            'Content-Type': 'application/json',
-            ...(TOKEN ? { Authorization: `Bearer ${TOKEN}` } : {}),
-          },
-        }
-      )
+      const res = await fetch('/api/tasks', { cache: 'no-store' })
       if (res.ok) {
         const json = await res.json()
         const strapiTasks = (json.data || []).map((t: Record<string, unknown>) => ({
@@ -158,7 +148,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
         }
       }
     } catch {
-      // Strapi unavailable
+      // API unavailable
     }
     set({ isLoaded: true })
   },

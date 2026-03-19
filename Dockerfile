@@ -11,6 +11,13 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 ENV NEXT_TELEMETRY_DISABLED=1
+
+# Build-time env for Next.js NEXT_PUBLIC_ inlining
+ARG NEXT_PUBLIC_STRAPI_URL=https://strapi.kapustin.family
+ARG NEXT_PUBLIC_STRAPI_TOKEN
+ENV NEXT_PUBLIC_STRAPI_URL=$NEXT_PUBLIC_STRAPI_URL
+ENV NEXT_PUBLIC_STRAPI_TOKEN=$NEXT_PUBLIC_STRAPI_TOKEN
+
 RUN npm run build
 
 FROM base AS runner
@@ -29,5 +36,9 @@ USER nextjs
 EXPOSE 3000
 ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
+
+# Runtime env for API routes (server-side)
+ENV STRAPI_URL=https://strapi.kapustin.family
+ENV STRAPI_API_TOKEN=""
 
 CMD ["node", "server.js"]
