@@ -2,10 +2,6 @@
 
 import dynamic from 'next/dynamic'
 import HUD from '@/components/ui/HUD'
-import TaskPanel from '@/components/ui/TaskPanel'
-import ResourceBar from '@/components/ui/ResourceBar'
-import AgentPanel from '@/components/ui/AgentPanel'
-import BuildMenu from '@/components/ui/BuildMenu'
 
 const CityScene = dynamic(() => import('@/components/city/CityScene'), {
   ssr: false,
@@ -34,11 +30,7 @@ export default function Home() {
   return (
     <main style={{ width: '100vw', height: '100vh', position: 'relative', overflow: 'hidden' }}>
       <CityScene />
-      <ResourceBar />
       <HUD />
-      <TaskPanel />
-      <AgentPanel />
-      <BuildMenu />
     </main>
   )
 }
