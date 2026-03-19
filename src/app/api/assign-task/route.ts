@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { broadcast, addActivity } from '@/lib/events'
+import { logEvent } from '@/lib/strapi-logger'
 
 export const dynamic = 'force-dynamic'
 
@@ -147,8 +148,20 @@ export async function POST(req: Request) {
     ].join('\n')
     const hooksResult = await notifyAgent(agentId, agentMessage)
 
-    // 3. SSE broadcast
-    console.log(`[ASSIGN] ── Step 3: SSE broadcast ──`)
+    // 3. Strapi rpg-event
+    const step3Start = Date.now()
+    console.log(`[ASSIGN] ── Step 3: Strapi rpg-event (${Date.now() - startTime}ms) ──`)
+    const strapiEventResult = await logEvent(
+      'task:assigned',
+      `Task "${taskTitle}" assigned to ${agent.name}`,
+      agentId,
+      { taskTitle, xpReward, priority, category, agentAccount: agent.account },
+    )
+    const step3Ms = Date.now() - step3Start
+
+    // 4. SSE broadcast
+    const step4Start = Date.now()
+    console.log(`[ASSIGN] ── Step 4: SSE broadcast (${Date.now() - startTime}ms) ──`)
     broadcast('task-assigned', {
       taskTitle,
       agentId,
@@ -157,25 +170,34 @@ export async function POST(req: Request) {
       xpReward,
       priority,
     })
+    const step4Ms = Date.now() - step4Start
+
     addActivity({
       type: 'task-assigned',
       message: `📋 Task "${taskTitle}" → ${agent.emoji} ${agent.name}`,
       agentId,
     })
 
-    // 4. Summary
+    // 5. Summary
     const elapsed = Date.now() - startTime
+    const pipeline = {
+      telegram: { ok: tgResult.ok, status: tgResult.status },
+      hooks: { ok: hooksResult.ok, status: hooksResult.status },
+      'strapi-event': { ok: strapiEventResult.ok, ms: step3Ms },
+      sse: { ok: true, ms: step4Ms },
+    }
     console.log(`[ASSIGN] ── Summary ──`)
     console.log(`[ASSIGN] Telegram: ${tgResult.ok ? '✅' : '❌'} (${tgResult.status || 'n/a'})`)
     console.log(`[ASSIGN] OpenClaw: ${hooksResult.ok ? '✅' : '❌'} (${hooksResult.status || 'n/a'})`)
-    console.log(`[ASSIGN] SSE: ✅ broadcast sent`)
+    console.log(`[ASSIGN] Strapi event: ${strapiEventResult.ok ? '✅' : '❌'} (${step3Ms}ms)`)
+    console.log(`[ASSIGN] SSE: ✅ (${step4Ms}ms)`)
     console.log(`[ASSIGN] ⏱️ Total time: ${elapsed}ms`)
     console.log(`${'='.repeat(60)}\n`)
 
     // Add detailed log to activity
     addActivity({
       type: 'system-log',
-      message: `🔧 Assign pipeline: TG=${tgResult.ok ? '✅' : '❌'} | Hooks=${hooksResult.ok ? '✅' : '❌'} | ${elapsed}ms`,
+      message: `🔧 Assign pipeline: TG=${tgResult.ok ? '✅' : '❌'} | Hooks=${hooksResult.ok ? '✅' : '❌'} | Strapi=${strapiEventResult.ok ? '✅' : '❌'} | ${elapsed}ms`,
       agentId,
     })
 
@@ -188,6 +210,7 @@ export async function POST(req: Request) {
       agentNotifyResponse: hooksResult.response,
       hookUrl: hooksResult.hookUrl,
       agent: agent.name,
+      pipeline,
       elapsed: `${elapsed}ms`,
     })
   } catch (err) {

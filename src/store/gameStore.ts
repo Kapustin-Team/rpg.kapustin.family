@@ -65,6 +65,16 @@ const DEFAULT_CHARACTER: Character = {
   totalTasksCompleted: 0,
 }
 
+export interface PipelineStage {
+  stage: 'assigned' | 'received' | 'started' | 'progress' | 'completed' | 'failed'
+  timestamp: string
+  message?: string
+}
+
+export interface TaskPipelineEntry {
+  stages: PipelineStage[]
+}
+
 interface GameStore {
   character: Character
   resources: Resource[]
@@ -73,6 +83,7 @@ interface GameStore {
   isLoaded: boolean
   selectedAgentId: string | null
   xpAnimation: { taskId: string; amount: number } | null
+  taskPipeline: Record<string, TaskPipelineEntry>
 
   setSelectedAgent: (id: string | null) => void
   assignTaskToAgent: (agentId: string, taskId: string) => void
@@ -80,6 +91,7 @@ interface GameStore {
   setTasks: (tasks: Task[]) => void
   clearXpAnimation: () => void
   loadFromStrapi: () => Promise<void>
+  addPipelineStage: (taskId: string, stage: PipelineStage['stage'], message?: string) => void
 }
 
 export const useGameStore = create<GameStore>((set, get) => ({
@@ -90,8 +102,21 @@ export const useGameStore = create<GameStore>((set, get) => ({
   isLoaded: false,
   selectedAgentId: null,
   xpAnimation: null,
+  taskPipeline: {},
 
   setSelectedAgent: (id) => set({ selectedAgentId: id }),
+
+  addPipelineStage: (taskId, stage, message) => set((state) => {
+    const existing = state.taskPipeline[taskId] || { stages: [] }
+    return {
+      taskPipeline: {
+        ...state.taskPipeline,
+        [taskId]: {
+          stages: [...existing.stages, { stage, timestamp: new Date().toISOString(), message }],
+        },
+      },
+    }
+  }),
 
   setTasks: (tasks) => set({ tasks }),
 

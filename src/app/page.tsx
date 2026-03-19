@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useRef, useCallback } from 'react'
-import { useGameStore, type Task } from '@/store/gameStore'
+import { useGameStore, type Task, type PipelineStage } from '@/store/gameStore'
 import { AGENTS } from '@/data/agents'
 
 // ─── Types ───
@@ -32,6 +32,34 @@ const STATUS_LABELS: Record<string, string> = {
   todo: 'To Do',
   in_progress: 'In Progress',
   done: 'Done',
+}
+
+const PIPELINE_STAGE_COLORS: Record<string, string> = {
+  assigned: 'bg-blue-700 text-blue-200',
+  received: 'bg-cyan-700 text-cyan-200',
+  started: 'bg-yellow-700 text-yellow-200',
+  progress: 'bg-orange-700 text-orange-200',
+  completed: 'bg-green-700 text-green-200',
+  failed: 'bg-red-700 text-red-200',
+}
+
+const PIPELINE_STAGE_LABELS: Record<string, string> = {
+  assigned: 'assigned',
+  received: 'received',
+  started: 'working',
+  progress: 'progress',
+  completed: 'done',
+  failed: 'failed',
+}
+
+const ACTIVITY_TYPE_COLORS: Record<string, string> = {
+  'task-assigned': 'border-l-blue-500',
+  'task-received': 'border-l-cyan-500',
+  'task-started': 'border-l-yellow-500',
+  'task-progress': 'border-l-orange-500',
+  'task-completed': 'border-l-green-500',
+  'task-failed': 'border-l-red-500',
+  'system-log': 'border-l-gray-500',
 }
 
 // ─── Resources Bar ───
@@ -159,12 +187,39 @@ function AgentCard({ agent, flashId }: { agent: typeof AGENTS[0]; flashId: strin
 }
 
 // ─── Task Card ───
+// ─── Pipeline Pills ───
+function PipelinePills({ stages }: { stages: PipelineStage[] }) {
+  if (!stages.length) return null
+  const latestByType = new Map<string, PipelineStage>()
+  for (const s of stages) latestByType.set(s.stage, s)
+  const ordered: PipelineStage['stage'][] = ['assigned', 'received', 'started', 'progress', 'completed', 'failed']
+  return (
+    <div className="flex flex-wrap gap-1 mt-1.5">
+      {ordered.map(stage => {
+        const entry = latestByType.get(stage)
+        if (!entry) return null
+        return (
+          <span
+            key={stage}
+            className={`text-[9px] px-1.5 py-0.5 rounded-full font-medium ${PIPELINE_STAGE_COLORS[stage] || 'bg-gray-700 text-gray-300'}`}
+            title={entry.message || stage}
+          >
+            {PIPELINE_STAGE_LABELS[stage] || stage}
+          </span>
+        )
+      })}
+    </div>
+  )
+}
+
+// ─── Task Card ───
 function TaskCard({ task, isFlashing }: { task: Task; isFlashing: boolean }) {
   const agents = useGameStore(s => s.agents)
   const assignTaskToAgent = useGameStore(s => s.assignTaskToAgent)
   const completeTask = useGameStore(s => s.completeTask)
   const xpAnimation = useGameStore(s => s.xpAnimation)
   const clearXpAnimation = useGameStore(s => s.clearXpAnimation)
+  const pipelineEntry = useGameStore(s => s.taskPipeline[task.id])
   const [completing, setCompleting] = useState(false)
   const showXp = xpAnimation?.taskId === task.id
 
@@ -275,6 +330,7 @@ function TaskCard({ task, isFlashing }: { task: Task; isFlashing: boolean }) {
             )}
             <span className="text-[10px] text-yellow-500">⭐ {task.xpReward} XP</span>
           </div>
+          {pipelineEntry && <PipelinePills stages={pipelineEntry.stages} />}
         </div>
       </div>
 
@@ -354,7 +410,7 @@ function ActivityFeed({ activities }: { activities: ActivityEntry[] }) {
           activities.map((a) => (
             <div
               key={a.id}
-              className="flex items-start gap-2 text-xs py-1.5 px-2 rounded hover:bg-gray-700/30 transition-colors"
+              className={`flex items-start gap-2 text-xs py-1.5 px-2 rounded hover:bg-gray-700/30 transition-colors border-l-2 ${ACTIVITY_TYPE_COLORS[a.type] || 'border-l-transparent'}`}
             >
               <span className="text-gray-500 font-mono shrink-0">{formatTime(a.timestamp)}</span>
               <span className="text-gray-300">{a.message}</span>
@@ -401,7 +457,11 @@ function useSSE(onActivity: (activity: ActivityEntry) => void) {
             timestamp: data.timestamp || new Date().toISOString(),
             agentId: data.agentId,
           })
-          // Refresh tasks from Strapi
+          // Add 'assigned' pipeline stage if we have a taskId
+          if (data.taskId) {
+            const { addPipelineStage } = useGameStore.getState()
+            addPipelineStage(data.taskId, 'assigned', `Assigned to ${data.agentName}`)
+          }
           loadFromStrapi()
         } catch { /* ignore */ }
       })
@@ -416,6 +476,10 @@ function useSSE(onActivity: (activity: ActivityEntry) => void) {
             timestamp: data.timestamp || new Date().toISOString(),
             agentId: data.agentId,
           })
+          if (data.taskId) {
+            const { addPipelineStage } = useGameStore.getState()
+            addPipelineStage(data.taskId, 'completed', `Completed by ${data.agentName}`)
+          }
           loadFromStrapi()
         } catch { /* ignore */ }
       })
@@ -433,6 +497,40 @@ function useSSE(onActivity: (activity: ActivityEntry) => void) {
           loadFromStrapi()
         } catch { /* ignore */ }
       })
+
+      // Pipeline stage events
+      const pipelineEvents = ['task-received', 'task-started', 'task-progress', 'task-failed'] as const
+      for (const eventType of pipelineEvents) {
+        eventSource.addEventListener(eventType, (e) => {
+          try {
+            const data = JSON.parse(e.data)
+            const stageMap: Record<string, string> = {
+              'task-received': 'received',
+              'task-started': 'started',
+              'task-progress': 'progress',
+              'task-failed': 'failed',
+            }
+            const stage = stageMap[eventType] || eventType.replace('task-', '')
+            const emoji: Record<string, string> = {
+              received: '📥', started: '🔨', progress: '⏳', failed: '❌',
+            }
+            onActivityRef.current({
+              id: `sse-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+              type: eventType,
+              message: `${emoji[stage] || '🔔'} [${stage.toUpperCase()}] ${data.message || `Task ${stage}`}`,
+              timestamp: data.timestamp || new Date().toISOString(),
+              agentId: data.agentId,
+              taskId: data.taskId,
+            })
+            // Update pipeline in store
+            if (data.taskId) {
+              const { addPipelineStage } = useGameStore.getState()
+              addPipelineStage(data.taskId, stage as 'received' | 'started' | 'progress' | 'failed', data.message)
+            }
+            loadFromStrapi()
+          } catch { /* ignore */ }
+        })
+      }
 
       eventSource.addEventListener('activity', (e) => {
         try {

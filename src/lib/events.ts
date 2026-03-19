@@ -1,5 +1,7 @@
 // In-process event bus for SSE broadcasting + detailed logging
 
+import { logEvent } from '@/lib/strapi-logger'
+
 export interface SSEEvent {
   type: string
   data: Record<string, unknown>
@@ -52,6 +54,19 @@ export function broadcast(type: string, data: Record<string, unknown>) {
   console.log(`[SSE] 📡 Broadcast complete: ${sent} sent, ${failed} failed`)
 }
 
+/** Persist an activity to Strapi rpg-events (fire-and-forget) */
+function persistToStrapi(activity: ActivityItem) {
+  console.log(`[LOG] 💾 Persisting activity to Strapi: ${activity.type} — ${activity.message.slice(0, 100)}`)
+  logEvent(
+    `activity:${activity.type}`,
+    activity.message,
+    activity.agentId,
+    { taskId: activity.taskId, activityId: activity.id, timestamp: activity.timestamp },
+  ).catch((err) => {
+    console.error(`[LOG] ❌ Strapi persist failed (non-blocking):`, err)
+  })
+}
+
 export function addActivity(item: Omit<ActivityItem, 'id' | 'timestamp'>) {
   const activity: ActivityItem = {
     ...item,
@@ -63,6 +78,10 @@ export function addActivity(item: Omit<ActivityItem, 'id' | 'timestamp'>) {
     activityLog.length = MAX_ACTIVITY
   }
   console.log(`[ACTIVITY] ➕ Added: ${activity.message} (total: ${activityLog.length})`)
+
+  // Also persist to Strapi rpg-events
+  persistToStrapi(activity)
+
   return activity
 }
 
