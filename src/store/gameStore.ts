@@ -102,34 +102,45 @@ export const useGameStore = create<GameStore>((set, get) => ({
   isLoaded: false,
   selectedAgentId: null,
   xpAnimation: null,
-  taskPipeline: {},
+  taskPipeline: typeof window !== 'undefined' ? (() => {
+    try { return JSON.parse(localStorage.getItem('rpg-city:taskPipeline') || '{}') } catch { return {} }
+  })() : {},
 
   setSelectedAgent: (id) => set({ selectedAgentId: id }),
 
   addPipelineStage: (taskId, stage, message) => set((state) => {
     const existing = state.taskPipeline[taskId] || { stages: [] }
-    return {
-      taskPipeline: {
-        ...state.taskPipeline,
-        [taskId]: {
-          stages: [...existing.stages, { stage, timestamp: new Date().toISOString(), message }],
-        },
+    const newPipeline = {
+      ...state.taskPipeline,
+      [taskId]: {
+        stages: [...existing.stages, { stage, timestamp: new Date().toISOString(), message }],
       },
     }
+    // Persist to localStorage
+    if (typeof window !== 'undefined') {
+      try { localStorage.setItem('rpg-city:taskPipeline', JSON.stringify(newPipeline)) } catch {}
+    }
+    return { taskPipeline: newPipeline }
   }),
 
   setTasks: (tasks) => set({ tasks }),
 
   clearXpAnimation: () => set({ xpAnimation: null }),
 
-  assignTaskToAgent: (agentId, taskId) => set((state) => ({
-    tasks: state.tasks.map(t =>
-      t.id === taskId ? { ...t, assignedTo: agentId, status: 'in_progress' as const } : t
-    ),
-    agents: state.agents.map(a =>
+  assignTaskToAgent: (agentId, taskId) => set((state) => {
+    const newAgents = state.agents.map(a =>
       a.id === agentId ? { ...a, status: 'working' as const, currentTaskId: taskId } : a
-    ),
-  })),
+    )
+    if (typeof window !== 'undefined') {
+      try { localStorage.setItem('rpg-city:agentStates', JSON.stringify(newAgents.map(a => ({ id: a.id, status: a.status, currentTaskId: a.currentTaskId })))) } catch {}
+    }
+    return {
+      tasks: state.tasks.map(t =>
+        t.id === taskId ? { ...t, assignedTo: agentId, status: 'in_progress' as const } : t
+      ),
+      agents: newAgents,
+    }
+  }),
 
   completeTask: (taskId) => set((state) => {
     const task = state.tasks.find(t => t.id === taskId)

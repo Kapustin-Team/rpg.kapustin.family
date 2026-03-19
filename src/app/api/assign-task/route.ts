@@ -103,8 +103,8 @@ export async function POST(req: Request) {
 
   try {
     const body = await req.json()
-    const { taskTitle, agentId, xpReward, priority, category } = body
-    console.log(`[ASSIGN] 📋 Task: "${taskTitle}"`)
+    const { taskTitle, agentId, xpReward, priority, category, taskId, documentId } = body
+    console.log(`[ASSIGN] 📋 Task: "${taskTitle}" (id=${taskId}, docId=${documentId})`)
     console.log(`[ASSIGN] 👤 Agent: ${agentId}`)
     console.log(`[ASSIGN] ⭐ XP: ${xpReward} | Priority: ${priority} | Category: ${category}`)
 
@@ -164,6 +164,7 @@ export async function POST(req: Request) {
     console.log(`[ASSIGN] ── Step 4: SSE broadcast (${Date.now() - startTime}ms) ──`)
     broadcast('task-assigned', {
       taskTitle,
+      taskId: taskId || documentId || '',
       agentId,
       agentName: agent.name,
       agentEmoji: agent.emoji,

@@ -3,6 +3,7 @@
 import { useEffect, useState, useRef, useCallback } from 'react'
 import { useGameStore, type Task, type PipelineStage } from '@/store/gameStore'
 import { AGENTS } from '@/data/agents'
+import { lsGet, lsSet } from '@/lib/local-storage'
 
 // ─── Types ───
 interface ActivityEntry {
@@ -381,7 +382,7 @@ function TaskCard({ task, isFlashing }: { task: Task; isFlashing: boolean }) {
       }
     }
 
-    console.log(`[UI] 📤 Calling /api/assign-task...`)
+    console.log(`[UI] 📤 Calling /api/assign-task... taskId=${task.id} docId=${task.documentId}`)
     try {
       const assignRes = await fetch('/api/assign-task', {
         method: 'POST',
@@ -389,6 +390,8 @@ function TaskCard({ task, isFlashing }: { task: Task; isFlashing: boolean }) {
         body: JSON.stringify({
           taskTitle: task.title,
           taskDescription: '',
+          taskId: task.id,
+          documentId: task.documentId,
           agentId,
           xpReward: task.xpReward,
           priority: task.priority,
@@ -584,27 +587,30 @@ function useSSE(
       eventSource.addEventListener('task-assigned', (e) => {
         try {
           const data = JSON.parse(e.data)
+          console.log(`[SSE] task-assigned received:`, data)
+          const taskId = data.taskId || data.agentId // fallback
           onActivityRef.current({
             id: `sse-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
             type: 'task-assigned',
             message: `📋 Task "${data.taskTitle}" → ${data.agentEmoji || ''} ${data.agentName}`,
             timestamp: data.timestamp || new Date().toISOString(),
             agentId: data.agentId,
+            taskId,
           })
-          if (data.taskId) {
+          if (taskId) {
             const { addPipelineStage } = useGameStore.getState()
-            addPipelineStage(data.taskId, 'assigned', `Assigned to ${data.agentName}`)
+            addPipelineStage(taskId, 'assigned', `Assigned to ${data.agentName}`)
           }
           // Feed pipeline visual tracker
           onPipelineRef.current({
-            taskId: data.taskId || data.agentId,
+            taskId,
             agentId: data.agentId,
             status: 'assigned',
             taskTitle: data.taskTitle,
             agentName: data.agentName,
           })
           loadFromStrapi()
-        } catch { /* ignore */ }
+        } catch (err) { console.error('[SSE] task-assigned error:', err) }
       })
 
       eventSource.addEventListener('task-completed', (e) => {
@@ -739,10 +745,30 @@ export default function HomePage() {
   const isLoaded = useGameStore(s => s.isLoaded)
   const tasks = useGameStore(s => s.tasks)
 
-  const [activities, setActivities] = useState<ActivityEntry[]>([])
+  const [activities, setActivitiesRaw] = useState<ActivityEntry[]>(() => lsGet<ActivityEntry[]>('activities', []))
   const [flashAgentId, setFlashAgentId] = useState<string | null>(null)
   const [flashTaskIds, setFlashTaskIds] = useState<Set<string>>(new Set())
-  const [visualPipelines, setVisualPipelines] = useState<Map<string, VisualPipeline>>(new Map())
+  const [visualPipelines, setVisualPipelinesRaw] = useState<Map<string, VisualPipeline>>(() => {
+    const saved = lsGet<Record<string, VisualPipeline>>('pipelines', {})
+    return new Map(Object.entries(saved))
+  })
+
+  // Wrap setters to persist to localStorage
+  const setActivities: typeof setActivitiesRaw = useCallback((updater) => {
+    setActivitiesRaw(prev => {
+      const next = typeof updater === 'function' ? updater(prev) : updater
+      lsSet('activities', next.slice(0, 200))
+      return next
+    })
+  }, [])
+
+  const setVisualPipelines: typeof setVisualPipelinesRaw = useCallback((updater) => {
+    setVisualPipelinesRaw(prev => {
+      const next = typeof updater === 'function' ? updater(prev) : updater
+      lsSet('pipelines', Object.fromEntries(next))
+      return next
+    })
+  }, [])
 
   // Load initial data
   useEffect(() => {
@@ -849,7 +875,18 @@ export default function HomePage() {
   const handlePipelineUpdate = useCallback((data: { taskId: string; agentId: string; status: string; taskTitle?: string; agentName?: string }) => {
     setVisualPipelines(prev => {
       const next = new Map(prev)
-      const key = data.agentId // Use agentId as key since taskId may not always be present
+      // Use taskId as primary key, fallback to agentId
+      const key = data.taskId || data.agentId
+      console.log(`[PIPELINE] Updating key="${key}" status="${data.status}" agent="${data.agentId}" task="${data.taskId}"`)
+      
+      // Also check if there's an existing pipeline under agentId that should be matched
+      if (data.taskId && !next.has(data.taskId) && next.has(data.agentId)) {
+        // Migrate from agentId key to taskId key
+        const existing = next.get(data.agentId)!
+        next.delete(data.agentId)
+        next.set(data.taskId, existing)
+        console.log(`[PIPELINE] Migrated key from agentId="${data.agentId}" to taskId="${data.taskId}"`)
+      }
 
       const STAGE_ORDER = ['assigned', 'received', 'started', 'progress', 'completed']
       const buildStages = () => [
