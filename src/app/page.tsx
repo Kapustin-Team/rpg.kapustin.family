@@ -186,7 +186,7 @@ function TaskCard({ task }: { task: Task }) {
 
   function handleAssign(agentId: string) {
     assignTaskToAgent(agentId, task.id)
-    // Also update Strapi
+    // Update Strapi
     if (task.documentId) {
       fetch(`/api/tasks/${task.documentId}`, {
         method: 'PUT',
@@ -194,6 +194,19 @@ function TaskCard({ task }: { task: Task }) {
         body: JSON.stringify({ status: 'in_progress' }),
       }).catch(() => {})
     }
+    // Notify agent about the assignment
+    fetch('/api/assign-task', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        taskTitle: task.title,
+        taskDescription: '',
+        agentId,
+        xpReward: task.xpReward,
+        priority: task.priority,
+        category: task.rpgCategory,
+      }),
+    }).catch(() => {})
   }
 
   return (
