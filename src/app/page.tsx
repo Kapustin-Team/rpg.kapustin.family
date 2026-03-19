@@ -14,6 +14,21 @@ interface ActivityEntry {
   taskId?: string
 }
 
+interface VisualPipeline {
+  taskId: string
+  taskTitle: string
+  agentId: string
+  agentName: string
+  agentEmoji: string
+  stages: {
+    status: string
+    emoji: string
+    label: string
+    timestamp?: string
+    reached: boolean
+  }[]
+}
+
 // ─── Priority colors ───
 const PRIORITY_COLORS: Record<string, string> = {
   critical: 'bg-red-600 text-white',
@@ -59,7 +74,50 @@ const ACTIVITY_TYPE_COLORS: Record<string, string> = {
   'task-progress': 'border-l-orange-500',
   'task-completed': 'border-l-green-500',
   'task-failed': 'border-l-red-500',
+  'task-status': 'border-l-yellow-500',
+  'task-updated': 'border-l-cyan-500',
   'system-log': 'border-l-gray-500',
+}
+
+const ACTIVITY_TEXT_COLORS: Record<string, string> = {
+  'task-completed': 'text-green-400',
+  'task-assigned': 'text-blue-400',
+  'task-status': 'text-yellow-400',
+  'task-updated': 'text-cyan-400',
+  'task-failed': 'text-red-400',
+  'system-log': 'text-gray-500',
+}
+
+// ─── Helpers ───
+function formatTimeWithSeconds(ts: string): string {
+  try {
+    return new Date(ts).toLocaleTimeString('en-GB', {
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+    })
+  } catch {
+    return '--:--:--'
+  }
+}
+
+function getPipelineStep(activity: ActivityEntry): string | null {
+  if (activity.type === 'task-assigned') return '[1/5]'
+  if (activity.type === 'task-status' || activity.type === 'task-received' || activity.type === 'task-started' || activity.type === 'task-progress') {
+    const msg = activity.message.toLowerCase()
+    if (msg.includes('received')) return '[2/5]'
+    if (msg.includes('started')) return '[3/5]'
+    if (msg.includes('progress')) return '[4/5]'
+    if (msg.includes('completed') || msg.includes('complete')) return '[5/5]'
+    if (msg.includes('failed')) return '[✗]'
+  }
+  if (activity.type === 'task-completed') return '[5/5]'
+  return null
+}
+
+function getAgentInfo(agentId?: string) {
+  if (!agentId) return null
+  return AGENTS.find(a => a.id === agentId)
 }
 
 // ─── Resources Bar ───
@@ -186,7 +244,6 @@ function AgentCard({ agent, flashId }: { agent: typeof AGENTS[0]; flashId: strin
   )
 }
 
-// ─── Task Card ───
 // ─── Pipeline Pills ───
 function PipelinePills({ stages }: { stages: PipelineStage[] }) {
   if (!stages.length) return null
@@ -212,6 +269,47 @@ function PipelinePills({ stages }: { stages: PipelineStage[] }) {
   )
 }
 
+// ─── Pipeline Tracker (Visual) ───
+function PipelineTracker({ pipeline }: { pipeline: VisualPipeline }) {
+  return (
+    <div className="rounded-lg bg-gray-800/60 border border-gray-700/50 p-3 text-xs">
+      <div className="flex items-center gap-2 mb-2">
+        <span className="text-sm">📋</span>
+        <span className="font-semibold text-gray-200 truncate">&ldquo;{pipeline.taskTitle}&rdquo;</span>
+        <span className="text-gray-500">→</span>
+        <span>{pipeline.agentEmoji} {pipeline.agentName}</span>
+      </div>
+      <div className="space-y-0.5 pl-2">
+        {pipeline.stages.map((stage, i) => {
+          const isLast = i === pipeline.stages.length - 1
+          const connector = isLast ? '└─' : '├─'
+          const stageColor = stage.reached
+            ? stage.status === 'completed' ? 'text-green-400'
+              : stage.status === 'failed' ? 'text-red-400'
+              : 'text-yellow-400'
+            : 'text-gray-600'
+
+          return (
+            <div key={stage.status} className={`flex items-center gap-2 font-mono ${stageColor}`}>
+              <span className="text-gray-600">{connector}</span>
+              <span>{stage.emoji}</span>
+              <span className="w-20">{stage.label}</span>
+              <span className="text-gray-600">────</span>
+              <span className={stage.reached ? '' : 'text-gray-600'}>
+                {stage.reached
+                  ? stage.timestamp
+                    ? formatTimeWithSeconds(stage.timestamp)
+                    : '✅'
+                  : '(waiting...)'}
+              </span>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 // ─── Task Card ───
 function TaskCard({ task, isFlashing }: { task: Task; isFlashing: boolean }) {
   const agents = useGameStore(s => s.agents)
@@ -232,11 +330,14 @@ function TaskCard({ task, isFlashing }: { task: Task; isFlashing: boolean }) {
 
   const assignedAgent = task.assignedTo ? agents.find(a => a.id === task.assignedTo) : null
 
+  // Pipeline step count for badge
+  const pipelineStepCount = pipelineEntry ? pipelineEntry.stages.length : 0
+  const pipelineLabel = pipelineStepCount > 0 ? `[${pipelineStepCount}/5]` : null
+
   async function handleComplete() {
     if (!assignedAgent || completing) return
     setCompleting(true)
     try {
-      // Update in Strapi
       if (task.documentId) {
         await fetch(`/api/tasks/${task.documentId}`, {
           method: 'PUT',
@@ -244,7 +345,6 @@ function TaskCard({ task, isFlashing }: { task: Task; isFlashing: boolean }) {
           body: JSON.stringify({ status: 'done' }),
         })
       }
-      // Notify
       await fetch('/api/notify-completion', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -266,7 +366,6 @@ function TaskCard({ task, isFlashing }: { task: Task; isFlashing: boolean }) {
     console.log(`[UI] 🎯 Assigning task "${task.title}" to ${agentId}`)
     assignTaskToAgent(agentId, task.id)
 
-    // Update Strapi
     if (task.documentId) {
       console.log(`[UI] 📤 Updating Strapi task ${task.documentId} → in_progress`)
       try {
@@ -282,7 +381,6 @@ function TaskCard({ task, isFlashing }: { task: Task; isFlashing: boolean }) {
       }
     }
 
-    // Notify agent
     console.log(`[UI] 📤 Calling /api/assign-task...`)
     try {
       const assignRes = await fetch('/api/assign-task', {
@@ -306,7 +404,6 @@ function TaskCard({ task, isFlashing }: { task: Task; isFlashing: boolean }) {
 
   return (
     <div className={`relative rounded-lg bg-gray-800/80 p-3 border transition-all duration-300 ${task.status === 'done' ? 'opacity-60 border-gray-700/50' : 'border-gray-700/50'} ${isFlashing ? 'ring-2 ring-yellow-400/60 border-yellow-500/40' : ''}`}>
-      {/* XP Animation */}
       {showXp && (
         <div className="absolute -top-4 right-4 text-yellow-400 font-bold text-lg animate-bounce z-10">
           +{xpAnimation.amount} XP! ⭐
@@ -315,7 +412,14 @@ function TaskCard({ task, isFlashing }: { task: Task; isFlashing: boolean }) {
 
       <div className="flex items-start justify-between gap-2">
         <div className="flex-1 min-w-0">
-          <div className="font-semibold text-sm">{task.title}</div>
+          <div className="flex items-center gap-2">
+            <div className="font-semibold text-sm">{task.title}</div>
+            {pipelineLabel && (
+              <span className="text-[10px] px-1.5 py-0.5 rounded bg-indigo-900/60 text-indigo-300 font-mono">
+                🔧 {pipelineLabel}
+              </span>
+            )}
+          </div>
           <div className="flex items-center gap-2 mt-1.5 flex-wrap">
             <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${PRIORITY_COLORS[task.priority] || PRIORITY_COLORS.low}`}>
               {task.priority}
@@ -372,9 +476,10 @@ function TaskCard({ task, isFlashing }: { task: Task; isFlashing: boolean }) {
   )
 }
 
-// ─── Activity Feed ───
+// ─── Enhanced Activity Feed ───
 function ActivityFeed({ activities }: { activities: ActivityEntry[] }) {
   const scrollRef = useRef<HTMLDivElement>(null)
+  const [showAll, setShowAll] = useState(false)
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -382,13 +487,7 @@ function ActivityFeed({ activities }: { activities: ActivityEntry[] }) {
     }
   }, [activities.length])
 
-  function formatTime(ts: string) {
-    try {
-      return new Date(ts).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
-    } catch {
-      return '--:--'
-    }
-  }
+  const visibleActivities = showAll ? activities : activities.slice(0, 10)
 
   return (
     <div className="rounded-lg bg-gray-800/80 border border-gray-700/50 overflow-hidden">
@@ -399,7 +498,7 @@ function ActivityFeed({ activities }: { activities: ActivityEntry[] }) {
       </div>
       <div
         ref={scrollRef}
-        className="max-h-64 overflow-y-auto p-2 space-y-1"
+        className={`overflow-y-auto p-2 space-y-1 ${showAll ? 'max-h-[600px]' : 'max-h-[420px]'}`}
         style={{ scrollBehavior: 'smooth' }}
       >
         {activities.length === 0 ? (
@@ -407,27 +506,63 @@ function ActivityFeed({ activities }: { activities: ActivityEntry[] }) {
             No activity yet — actions will appear here in real-time
           </div>
         ) : (
-          activities.map((a) => (
-            <div
-              key={a.id}
-              className={`flex items-start gap-2 text-xs py-1.5 px-2 rounded hover:bg-gray-700/30 transition-colors border-l-2 ${ACTIVITY_TYPE_COLORS[a.type] || 'border-l-transparent'}`}
-            >
-              <span className="text-gray-500 font-mono shrink-0">{formatTime(a.timestamp)}</span>
-              <span className="text-gray-300">{a.message}</span>
-            </div>
-          ))
+          visibleActivities.map((a) => {
+            const agent = getAgentInfo(a.agentId)
+            const textColor = ACTIVITY_TEXT_COLORS[a.type] || 'text-gray-300'
+            const borderColor = ACTIVITY_TYPE_COLORS[a.type] || 'border-l-transparent'
+            const pipelineStep = getPipelineStep(a)
+
+            // Background color by type
+            const bgColor =
+              a.type === 'task-completed' ? 'bg-green-900/10' :
+              a.type === 'task-failed' || (a.type === 'task-status' && a.message.includes('failed')) ? 'bg-red-900/10' :
+              a.type === 'task-status' ? 'bg-yellow-900/5' :
+              a.type === 'system-log' ? 'bg-gray-800/40' :
+              ''
+
+            return (
+              <div
+                key={a.id}
+                className={`flex items-start gap-2 text-xs py-1.5 px-2 rounded hover:bg-gray-700/30 transition-colors border-l-2 ${borderColor} ${bgColor}`}
+              >
+                <span className="text-gray-500 font-mono shrink-0 w-[60px]">{formatTimeWithSeconds(a.timestamp)}</span>
+                {agent && (
+                  <span className="shrink-0" title={agent.name}>{agent.emoji}</span>
+                )}
+                {pipelineStep && (
+                  <span className="text-indigo-400 font-mono shrink-0 text-[10px]">{pipelineStep}</span>
+                )}
+                <span className={textColor}>{a.message}</span>
+              </div>
+            )
+          })
         )}
       </div>
+      {activities.length > 10 && (
+        <div className="px-3 py-2 border-t border-gray-700/50">
+          <button
+            onClick={() => setShowAll(!showAll)}
+            className="text-xs text-indigo-400 hover:text-indigo-300 transition-colors"
+          >
+            {showAll ? `Show less ↑` : `Show all ${activities.length} events ↓`}
+          </button>
+        </div>
+      )}
     </div>
   )
 }
 
 // ─── useSSE Hook ───
-function useSSE(onActivity: (activity: ActivityEntry) => void) {
+function useSSE(
+  onActivity: (activity: ActivityEntry) => void,
+  onPipelineUpdate: (data: { taskId: string; agentId: string; status: string; taskTitle?: string; agentName?: string }) => void,
+) {
   const [connected, setConnected] = useState(false)
   const loadFromStrapi = useGameStore(s => s.loadFromStrapi)
   const onActivityRef = useRef(onActivity)
+  const onPipelineRef = useRef(onPipelineUpdate)
   onActivityRef.current = onActivity
+  onPipelineRef.current = onPipelineUpdate
 
   useEffect(() => {
     let eventSource: EventSource | null = null
@@ -443,7 +578,6 @@ function useSSE(onActivity: (activity: ActivityEntry) => void) {
       eventSource.onerror = () => {
         setConnected(false)
         eventSource?.close()
-        // Reconnect after 5s
         reconnectTimer = setTimeout(connect, 5000)
       }
 
@@ -457,11 +591,18 @@ function useSSE(onActivity: (activity: ActivityEntry) => void) {
             timestamp: data.timestamp || new Date().toISOString(),
             agentId: data.agentId,
           })
-          // Add 'assigned' pipeline stage if we have a taskId
           if (data.taskId) {
             const { addPipelineStage } = useGameStore.getState()
             addPipelineStage(data.taskId, 'assigned', `Assigned to ${data.agentName}`)
           }
+          // Feed pipeline visual tracker
+          onPipelineRef.current({
+            taskId: data.taskId || data.agentId,
+            agentId: data.agentId,
+            status: 'assigned',
+            taskTitle: data.taskTitle,
+            agentName: data.agentName,
+          })
           loadFromStrapi()
         } catch { /* ignore */ }
       })
@@ -480,6 +621,13 @@ function useSSE(onActivity: (activity: ActivityEntry) => void) {
             const { addPipelineStage } = useGameStore.getState()
             addPipelineStage(data.taskId, 'completed', `Completed by ${data.agentName}`)
           }
+          onPipelineRef.current({
+            taskId: data.taskId || data.agentId,
+            agentId: data.agentId,
+            status: 'completed',
+            taskTitle: data.taskTitle,
+            agentName: data.agentName,
+          })
           loadFromStrapi()
         } catch { /* ignore */ }
       })
@@ -495,6 +643,34 @@ function useSSE(onActivity: (activity: ActivityEntry) => void) {
             taskId: data.taskId,
           })
           loadFromStrapi()
+        } catch { /* ignore */ }
+      })
+
+      // task-status-update from /api/task-status
+      eventSource.addEventListener('task-status-update', (e) => {
+        try {
+          const data = JSON.parse(e.data)
+          const emoji = data.emoji || '📌'
+          const progressText = data.progress !== undefined ? ` (${data.progress}%)` : ''
+          onActivityRef.current({
+            id: `sse-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+            type: 'task-status',
+            message: `${emoji} Task ${data.taskId}: ${data.status}${progressText} — ${data.message || ''}`,
+            timestamp: data.timestamp || new Date().toISOString(),
+            agentId: data.agentId,
+            taskId: data.taskId,
+          })
+          // Update pipeline stage in store
+          if (data.taskId && ['received', 'started', 'progress', 'completed', 'failed'].includes(data.status)) {
+            const { addPipelineStage } = useGameStore.getState()
+            addPipelineStage(data.taskId, data.status, data.message)
+          }
+          // Feed visual pipeline
+          onPipelineRef.current({
+            taskId: data.taskId,
+            agentId: data.agentId,
+            status: data.status,
+          })
         } catch { /* ignore */ }
       })
 
@@ -522,11 +698,15 @@ function useSSE(onActivity: (activity: ActivityEntry) => void) {
               agentId: data.agentId,
               taskId: data.taskId,
             })
-            // Update pipeline in store
             if (data.taskId) {
               const { addPipelineStage } = useGameStore.getState()
               addPipelineStage(data.taskId, stage as 'received' | 'started' | 'progress' | 'failed', data.message)
             }
+            onPipelineRef.current({
+              taskId: data.taskId,
+              agentId: data.agentId,
+              status: stage,
+            })
             loadFromStrapi()
           } catch { /* ignore */ }
         })
@@ -562,13 +742,14 @@ export default function HomePage() {
   const [activities, setActivities] = useState<ActivityEntry[]>([])
   const [flashAgentId, setFlashAgentId] = useState<string | null>(null)
   const [flashTaskIds, setFlashTaskIds] = useState<Set<string>>(new Set())
+  const [visualPipelines, setVisualPipelines] = useState<Map<string, VisualPipeline>>(new Map())
 
   // Load initial data
   useEffect(() => {
     loadFromStrapi()
   }, [loadFromStrapi])
 
-  // Auto-refresh every 30s as fallback
+  // Auto-refresh every 30s
   useEffect(() => {
     const interval = setInterval(() => {
       loadFromStrapi()
@@ -576,12 +757,65 @@ export default function HomePage() {
     return () => clearInterval(interval)
   }, [loadFromStrapi])
 
-  // Load initial activities
+  // Load persisted events from Strapi on mount
+  useEffect(() => {
+    console.log('[UI] 📤 Loading persisted events from /api/events-log')
+    fetch('/api/events-log?limit=50')
+      .then(r => r.json())
+      .then(data => {
+        if (data.events && Array.isArray(data.events)) {
+          console.log(`[UI] ✅ Loaded ${data.events.length} persisted events from Strapi`)
+          const mapped: ActivityEntry[] = data.events.map((e: Record<string, unknown>) => {
+            const meta = (e.metadata || {}) as Record<string, unknown>
+            return {
+              id: `strapi-${e.id || Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+              type: (meta.originalType as string) || 'system-log',
+              message: (e.description as string) || (e.title as string) || 'Event',
+              timestamp: (e.happenedAt as string) || (e.createdAt as string) || new Date().toISOString(),
+              agentId: meta.agentId as string | undefined,
+              taskId: meta.taskId as string | undefined,
+            }
+          })
+          setActivities(prev => {
+            const combined = [...prev, ...mapped]
+            const seen = new Set<string>()
+            const unique = combined.filter(a => {
+              const key = `${a.type}-${a.message.slice(0, 80)}-${a.timestamp.slice(0, 19)}`
+              if (seen.has(key)) return false
+              seen.add(key)
+              return true
+            })
+            unique.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+            return unique.slice(0, 100)
+          })
+        }
+      })
+      .catch((err) => {
+        console.error('[UI] ❌ Failed to load persisted events:', err)
+      })
+  }, [])
+
+  // Load in-memory activities
   useEffect(() => {
     fetch('/api/activity')
       .then(r => r.json())
       .then(data => {
-        if (data.activities) setActivities(data.activities)
+        if (data.activities) {
+          setActivities(prev => {
+            const combined = [...data.activities, ...prev]
+            const seen = new Set<string>()
+            const unique = combined.filter((a: ActivityEntry) => {
+              const key = `${a.type}-${a.message.slice(0, 80)}-${a.timestamp.slice(0, 19)}`
+              if (seen.has(key)) return false
+              seen.add(key)
+              return true
+            })
+            unique.sort((a: ActivityEntry, b: ActivityEntry) =>
+              new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+            )
+            return unique.slice(0, 100)
+          })
+        }
       })
       .catch(() => {})
   }, [])
@@ -590,17 +824,15 @@ export default function HomePage() {
   const handleActivity = useCallback((activity: ActivityEntry) => {
     setActivities(prev => {
       const next = [activity, ...prev]
-      if (next.length > 50) next.length = 50
+      if (next.length > 100) next.length = 100
       return next
     })
 
-    // Flash agent card
     if (activity.agentId) {
       setFlashAgentId(activity.agentId)
       setTimeout(() => setFlashAgentId(null), 2000)
     }
 
-    // Flash task card
     if (activity.taskId) {
       setFlashTaskIds(prev => new Set(prev).add(activity.taskId!))
       setTimeout(() => {
@@ -613,8 +845,64 @@ export default function HomePage() {
     }
   }, [])
 
-  // SSE connection
-  const connected = useSSE(handleActivity)
+  // Handle pipeline status updates
+  const handlePipelineUpdate = useCallback((data: { taskId: string; agentId: string; status: string; taskTitle?: string; agentName?: string }) => {
+    setVisualPipelines(prev => {
+      const next = new Map(prev)
+      const key = data.agentId // Use agentId as key since taskId may not always be present
+
+      const STAGE_ORDER = ['assigned', 'received', 'started', 'progress', 'completed']
+      const buildStages = () => [
+        { status: 'assigned', emoji: '📤', label: 'Assigned', reached: false },
+        { status: 'received', emoji: '📨', label: 'Received', reached: false },
+        { status: 'started', emoji: '🏃', label: 'Started', reached: false },
+        { status: 'progress', emoji: '⏳', label: 'Progress', reached: false },
+        { status: 'completed', emoji: '✅', label: 'Completed', reached: false },
+      ]
+
+      let pipeline = next.get(key)
+      if (!pipeline) {
+        const agent = AGENTS.find(a => a.id === data.agentId)
+        pipeline = {
+          taskId: data.taskId,
+          taskTitle: data.taskTitle || `Task ${data.taskId}`,
+          agentId: data.agentId,
+          agentName: data.agentName || agent?.name || data.agentId,
+          agentEmoji: agent?.emoji || '🤖',
+          stages: buildStages(),
+        }
+      }
+
+      // Update title/name if provided
+      if (data.taskTitle) pipeline.taskTitle = data.taskTitle
+      if (data.agentName) pipeline.agentName = data.agentName
+
+      const stageIdx = STAGE_ORDER.indexOf(data.status)
+      if (data.status === 'failed') {
+        // Mark up to progress as reached, then replace completed with failed
+        for (let i = 0; i < 4; i++) pipeline.stages[i].reached = true
+        pipeline.stages[4] = {
+          status: 'failed',
+          emoji: '❌',
+          label: 'Failed',
+          reached: true,
+          timestamp: new Date().toISOString(),
+        }
+      } else if (stageIdx >= 0) {
+        for (let i = 0; i <= stageIdx; i++) {
+          pipeline.stages[i].reached = true
+          if (i === stageIdx && !pipeline.stages[i].timestamp) {
+            pipeline.stages[i].timestamp = new Date().toISOString()
+          }
+        }
+      }
+
+      next.set(key, { ...pipeline })
+      return next
+    })
+  }, [])
+
+  const connected = useSSE(handleActivity, handlePipelineUpdate)
 
   const activeTasks = tasks.filter(t => t.status !== 'done')
   const doneTasks = tasks.filter(t => t.status === 'done')
@@ -688,6 +976,20 @@ export default function HomePage() {
                 )}
               </section>
             </div>
+
+            {/* Pipeline Trackers */}
+            {visualPipelines.size > 0 && (
+              <div>
+                <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-2">
+                  🔧 Active Pipelines ({visualPipelines.size})
+                </h2>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {[...visualPipelines.values()].map(pipeline => (
+                    <PipelineTracker key={pipeline.agentId} pipeline={pipeline} />
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* Bottom: Activity Feed */}
             <ActivityFeed activities={activities} />

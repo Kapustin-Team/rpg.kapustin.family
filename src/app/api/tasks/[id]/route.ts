@@ -1,5 +1,6 @@
 import { NextRequest } from 'next/server'
 import { broadcast, addActivity } from '@/lib/events'
+import { logEvent } from '@/lib/strapi-logger'
 
 export async function PUT(
   req: NextRequest,
@@ -33,6 +34,16 @@ export async function PUT(
     const data = await res.json()
     console.log(`[TASK-UPDATE] ${res.ok ? '✅' : '❌'} Strapi status: ${res.status}`)
     console.log(`[TASK-UPDATE] 📥 Response: ${JSON.stringify(data).slice(0, 300)}`)
+
+    // Strapi rpg-event
+    console.log(`[TASK-UPDATE] ── Step 1b: Strapi rpg-event ──`)
+    const strapiEventResult = await logEvent(
+      'task:updated',
+      `Task ${id} updated to ${body.status || 'modified'}`,
+      undefined,
+      { taskId: id, status: body.status as string || 'modified' },
+    )
+    console.log(`[TASK-UPDATE] Strapi event: ${strapiEventResult.ok ? '✅' : '❌'}`)
 
     // Broadcast task update
     console.log(`[TASK-UPDATE] ── Step 2: SSE broadcast ──`)
