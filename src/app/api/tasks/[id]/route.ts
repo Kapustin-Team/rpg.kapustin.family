@@ -1,4 +1,5 @@
 import { NextRequest } from 'next/server'
+import { broadcast, addActivity } from '@/lib/events'
 
 export async function PUT(
   req: NextRequest,
@@ -19,5 +20,17 @@ export async function PUT(
   })
 
   const data = await res.json()
+
+  // Broadcast task update
+  broadcast('task-updated', {
+    taskId: id,
+    status: body.status,
+  })
+  addActivity({
+    type: 'task-updated',
+    message: `🔄 Task updated → ${body.status || 'modified'}`,
+    taskId: id,
+  })
+
   return Response.json(data)
 }

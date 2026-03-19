@@ -1,8 +1,18 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef, useCallback } from 'react'
 import { useGameStore, type Task } from '@/store/gameStore'
 import { AGENTS } from '@/data/agents'
+
+// ─── Types ───
+interface ActivityEntry {
+  id: string
+  type: string
+  message: string
+  timestamp: string
+  agentId?: string
+  taskId?: string
+}
 
 // ─── Priority colors ───
 const PRIORITY_COLORS: Record<string, string> = {
@@ -77,8 +87,20 @@ function CharacterLevel() {
   )
 }
 
+// ─── SSE Connection indicator ───
+function ConnectionStatus({ connected }: { connected: boolean }) {
+  return (
+    <span className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full ${
+      connected ? 'bg-green-900/60 text-green-400' : 'bg-red-900/60 text-red-400'
+    }`}>
+      <span className={`w-1.5 h-1.5 rounded-full ${connected ? 'bg-green-400 animate-pulse' : 'bg-red-400'}`} />
+      {connected ? 'Live' : 'Offline'}
+    </span>
+  )
+}
+
 // ─── Agent Card ───
-function AgentCard({ agent }: { agent: typeof AGENTS[0] }) {
+function AgentCard({ agent, flashId }: { agent: typeof AGENTS[0]; flashId: string | null }) {
   const [expanded, setExpanded] = useState(false)
   const storeAgent = useGameStore(s => s.agents.find(a => a.id === agent.id))
   const tasks = useGameStore(s => s.tasks)
@@ -90,10 +112,11 @@ function AgentCard({ agent }: { agent: typeof AGENTS[0] }) {
     : null
   const status = storeAgent?.status || 'idle'
   const isSelected = selectedAgentId === agent.id
+  const isFlashing = flashId === agent.id
 
   return (
     <div
-      className={`rounded-lg bg-gray-800/80 p-3 cursor-pointer transition-all border border-transparent hover:border-gray-600 ${isSelected ? 'ring-2 ring-yellow-500/50' : ''}`}
+      className={`rounded-lg bg-gray-800/80 p-3 cursor-pointer transition-all border border-transparent hover:border-gray-600 ${isSelected ? 'ring-2 ring-yellow-500/50' : ''} ${isFlashing ? 'animate-pulse ring-2 ring-yellow-400/70' : ''}`}
       style={{ borderLeftWidth: '4px', borderLeftColor: agent.color }}
       onClick={() => {
         setSelectedAgent(isSelected ? null : agent.id)
@@ -136,7 +159,7 @@ function AgentCard({ agent }: { agent: typeof AGENTS[0] }) {
 }
 
 // ─── Task Card ───
-function TaskCard({ task }: { task: Task }) {
+function TaskCard({ task, isFlashing }: { task: Task; isFlashing: boolean }) {
   const agents = useGameStore(s => s.agents)
   const assignTaskToAgent = useGameStore(s => s.assignTaskToAgent)
   const completeTask = useGameStore(s => s.completeTask)
@@ -210,7 +233,7 @@ function TaskCard({ task }: { task: Task }) {
   }
 
   return (
-    <div className={`relative rounded-lg bg-gray-800/80 p-3 border border-gray-700/50 transition-all ${task.status === 'done' ? 'opacity-60' : ''}`}>
+    <div className={`relative rounded-lg bg-gray-800/80 p-3 border transition-all duration-300 ${task.status === 'done' ? 'opacity-60 border-gray-700/50' : 'border-gray-700/50'} ${isFlashing ? 'ring-2 ring-yellow-400/60 border-yellow-500/40' : ''}`}>
       {/* XP Animation */}
       {showXp && (
         <div className="absolute -top-4 right-4 text-yellow-400 font-bold text-lg animate-bounce z-10">
@@ -276,15 +299,207 @@ function TaskCard({ task }: { task: Task }) {
   )
 }
 
+// ─── Activity Feed ───
+function ActivityFeed({ activities }: { activities: ActivityEntry[] }) {
+  const scrollRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = 0
+    }
+  }, [activities.length])
+
+  function formatTime(ts: string) {
+    try {
+      return new Date(ts).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
+    } catch {
+      return '--:--'
+    }
+  }
+
+  return (
+    <div className="rounded-lg bg-gray-800/80 border border-gray-700/50 overflow-hidden">
+      <div className="px-3 py-2 border-b border-gray-700/50 flex items-center gap-2">
+        <span className="text-sm">📡</span>
+        <h3 className="text-sm font-semibold text-gray-300">Live Activity</h3>
+        <span className="text-xs text-gray-500">({activities.length})</span>
+      </div>
+      <div
+        ref={scrollRef}
+        className="max-h-64 overflow-y-auto p-2 space-y-1"
+        style={{ scrollBehavior: 'smooth' }}
+      >
+        {activities.length === 0 ? (
+          <div className="text-center text-gray-600 text-xs py-4">
+            No activity yet — actions will appear here in real-time
+          </div>
+        ) : (
+          activities.map((a) => (
+            <div
+              key={a.id}
+              className="flex items-start gap-2 text-xs py-1.5 px-2 rounded hover:bg-gray-700/30 transition-colors"
+            >
+              <span className="text-gray-500 font-mono shrink-0">{formatTime(a.timestamp)}</span>
+              <span className="text-gray-300">{a.message}</span>
+            </div>
+          ))
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ─── useSSE Hook ───
+function useSSE(onActivity: (activity: ActivityEntry) => void) {
+  const [connected, setConnected] = useState(false)
+  const loadFromStrapi = useGameStore(s => s.loadFromStrapi)
+  const onActivityRef = useRef(onActivity)
+  onActivityRef.current = onActivity
+
+  useEffect(() => {
+    let eventSource: EventSource | null = null
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null
+
+    function connect() {
+      eventSource = new EventSource('/api/events')
+
+      eventSource.onopen = () => {
+        setConnected(true)
+      }
+
+      eventSource.onerror = () => {
+        setConnected(false)
+        eventSource?.close()
+        // Reconnect after 5s
+        reconnectTimer = setTimeout(connect, 5000)
+      }
+
+      eventSource.addEventListener('task-assigned', (e) => {
+        try {
+          const data = JSON.parse(e.data)
+          onActivityRef.current({
+            id: `sse-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+            type: 'task-assigned',
+            message: `📋 Task "${data.taskTitle}" → ${data.agentEmoji || ''} ${data.agentName}`,
+            timestamp: data.timestamp || new Date().toISOString(),
+            agentId: data.agentId,
+          })
+          // Refresh tasks from Strapi
+          loadFromStrapi()
+        } catch { /* ignore */ }
+      })
+
+      eventSource.addEventListener('task-completed', (e) => {
+        try {
+          const data = JSON.parse(e.data)
+          onActivityRef.current({
+            id: `sse-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+            type: 'task-completed',
+            message: `✅ "${data.taskTitle}" completed by ${data.agentName} (+${data.xpReward} XP)`,
+            timestamp: data.timestamp || new Date().toISOString(),
+            agentId: data.agentId,
+          })
+          loadFromStrapi()
+        } catch { /* ignore */ }
+      })
+
+      eventSource.addEventListener('task-updated', (e) => {
+        try {
+          const data = JSON.parse(e.data)
+          onActivityRef.current({
+            id: `sse-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+            type: 'task-updated',
+            message: `🔄 Task updated → ${data.status || 'modified'}`,
+            timestamp: data.timestamp || new Date().toISOString(),
+            taskId: data.taskId,
+          })
+          loadFromStrapi()
+        } catch { /* ignore */ }
+      })
+
+      eventSource.addEventListener('activity', (e) => {
+        try {
+          const data = JSON.parse(e.data)
+          if (data.activity) {
+            onActivityRef.current(data.activity)
+          }
+        } catch { /* ignore */ }
+      })
+    }
+
+    connect()
+
+    return () => {
+      eventSource?.close()
+      if (reconnectTimer) clearTimeout(reconnectTimer)
+    }
+  }, [loadFromStrapi])
+
+  return connected
+}
+
 // ─── Main Page ───
 export default function HomePage() {
   const loadFromStrapi = useGameStore(s => s.loadFromStrapi)
   const isLoaded = useGameStore(s => s.isLoaded)
   const tasks = useGameStore(s => s.tasks)
 
+  const [activities, setActivities] = useState<ActivityEntry[]>([])
+  const [flashAgentId, setFlashAgentId] = useState<string | null>(null)
+  const [flashTaskIds, setFlashTaskIds] = useState<Set<string>>(new Set())
+
+  // Load initial data
   useEffect(() => {
     loadFromStrapi()
   }, [loadFromStrapi])
+
+  // Auto-refresh every 30s as fallback
+  useEffect(() => {
+    const interval = setInterval(() => {
+      loadFromStrapi()
+    }, 30000)
+    return () => clearInterval(interval)
+  }, [loadFromStrapi])
+
+  // Load initial activities
+  useEffect(() => {
+    fetch('/api/activity')
+      .then(r => r.json())
+      .then(data => {
+        if (data.activities) setActivities(data.activities)
+      })
+      .catch(() => {})
+  }, [])
+
+  // Handle new activity from SSE
+  const handleActivity = useCallback((activity: ActivityEntry) => {
+    setActivities(prev => {
+      const next = [activity, ...prev]
+      if (next.length > 50) next.length = 50
+      return next
+    })
+
+    // Flash agent card
+    if (activity.agentId) {
+      setFlashAgentId(activity.agentId)
+      setTimeout(() => setFlashAgentId(null), 2000)
+    }
+
+    // Flash task card
+    if (activity.taskId) {
+      setFlashTaskIds(prev => new Set(prev).add(activity.taskId!))
+      setTimeout(() => {
+        setFlashTaskIds(prev => {
+          const next = new Set(prev)
+          next.delete(activity.taskId!)
+          return next
+        })
+      }, 2000)
+    }
+  }, [])
+
+  // SSE connection
+  const connected = useSSE(handleActivity)
 
   const activeTasks = tasks.filter(t => t.status !== 'done')
   const doneTasks = tasks.filter(t => t.status === 'done')
@@ -298,6 +513,7 @@ export default function HomePage() {
             <h1 className="text-xl font-bold tracking-wide" style={{ fontFamily: 'Cinzel, serif' }}>
               ⚔️ RPG City Control Panel
             </h1>
+            <ConnectionStatus connected={connected} />
           </div>
           <ResourcesBar />
         </div>
@@ -317,44 +533,49 @@ export default function HomePage() {
             <div className="ng-spinner" />
           </div>
         ) : (
-          <div className="flex flex-col lg:flex-row gap-4">
-            {/* Left: Agents */}
-            <aside className="lg:w-72 shrink-0 space-y-2">
-              <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-2">
-                Agents ({AGENTS.length})
-              </h2>
-              {AGENTS.map(agent => (
-                <AgentCard key={agent.id} agent={agent} />
-              ))}
-            </aside>
-
-            {/* Right: Tasks */}
-            <section className="flex-1 min-w-0">
-              <div className="flex items-center justify-between mb-2">
-                <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-wider">
-                  Tasks ({tasks.length})
+          <div className="flex flex-col gap-4">
+            <div className="flex flex-col lg:flex-row gap-4">
+              {/* Left: Agents */}
+              <aside className="lg:w-72 shrink-0 space-y-2">
+                <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-2">
+                  Agents ({AGENTS.length})
                 </h2>
-                <div className="flex gap-3 text-xs text-gray-500">
-                  <span>📋 {activeTasks.length} active</span>
-                  <span>✅ {doneTasks.length} done</span>
-                </div>
-              </div>
+                {AGENTS.map(agent => (
+                  <AgentCard key={agent.id} agent={agent} flashId={flashAgentId} />
+                ))}
+              </aside>
 
-              {tasks.length === 0 ? (
-                <div className="text-center text-gray-600 py-12">
-                  No tasks loaded from Strapi
+              {/* Right: Tasks */}
+              <section className="flex-1 min-w-0">
+                <div className="flex items-center justify-between mb-2">
+                  <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-wider">
+                    Tasks ({tasks.length})
+                  </h2>
+                  <div className="flex gap-3 text-xs text-gray-500">
+                    <span>📋 {activeTasks.length} active</span>
+                    <span>✅ {doneTasks.length} done</span>
+                  </div>
                 </div>
-              ) : (
-                <div className="grid gap-2 sm:grid-cols-2">
-                  {activeTasks.map(task => (
-                    <TaskCard key={task.id} task={task} />
-                  ))}
-                  {doneTasks.map(task => (
-                    <TaskCard key={task.id} task={task} />
-                  ))}
-                </div>
-              )}
-            </section>
+
+                {tasks.length === 0 ? (
+                  <div className="text-center text-gray-600 py-12">
+                    No tasks loaded from Strapi
+                  </div>
+                ) : (
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    {activeTasks.map(task => (
+                      <TaskCard key={task.id} task={task} isFlashing={flashTaskIds.has(task.id)} />
+                    ))}
+                    {doneTasks.map(task => (
+                      <TaskCard key={task.id} task={task} isFlashing={flashTaskIds.has(task.id)} />
+                    ))}
+                  </div>
+                )}
+              </section>
+            </div>
+
+            {/* Bottom: Activity Feed */}
+            <ActivityFeed activities={activities} />
           </div>
         )}
       </main>

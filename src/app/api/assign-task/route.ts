@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { broadcast, addActivity } from '@/lib/events'
 
 export const dynamic = 'force-dynamic'
 
@@ -105,6 +106,21 @@ export async function POST(req: Request) {
       `Выполни задачу и отчитайся в группу AGENTS topic 60.`,
     ].join('\n')
     const agentNotified = await notifyAgent(agentId, agentMessage)
+
+    // 3. Broadcast SSE event + add activity
+    broadcast('task-assigned', {
+      taskTitle,
+      agentId,
+      agentName: agent.name,
+      agentEmoji: agent.emoji,
+      xpReward,
+      priority,
+    })
+    addActivity({
+      type: 'task-assigned',
+      message: `📋 Task "${taskTitle}" → ${agent.emoji} ${agent.name}`,
+      agentId,
+    })
 
     return NextResponse.json({
       success: true,
